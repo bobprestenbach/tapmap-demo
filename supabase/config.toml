@@ -1,0 +1,13 @@
+project_id = "jombmjxzvpskjjxahmul"
+
+# All sync jobs authenticate with the x-cron-secret header (see functions/_shared/job.ts).
+[functions.places_sync]
+verify_jwt = false
+[functions.website_sync]
+verify_jwt = false
+[functions.events_sync]
+verify_jwt = false
+[functions.trucks_sync]
+verify_jwt = false
+[functions.expire_stale]
+verify_jwt = false
