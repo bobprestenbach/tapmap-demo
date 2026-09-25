@@ -148,6 +148,7 @@ export const EXTRACT_SYSTEM = `You extract FOOD TRUCK and FOOD POP-UP schedule s
 Return ONLY JSON: {"stops":[{"truck":string,"kind":"truck_stop"|"popup","date":"YYYY-MM-DD"|null,"days_of_week":[0-6]|null,"start":"HH:MM","end":"HH:MM"|null,"location_name":string|null,"address":string|null,"description":string|null,"confidence":0..1}]}
 Rules:
 - Only include stops the text explicitly states: a truck/pop-up at a place on a specific date, or an explicit weekly recurring schedule ("every Tuesday at X 5-9pm") -> days_of_week (0=Sunday..6=Saturday) with date null.
+- "truck" = the vendor / pop-up / truck name, often inside an event title (e.g. "Hatch + Harvest & TNF Watch Party" -> "Hatch + Harvest"; "Jazzy Eggrolls Pop-up" -> "Jazzy Eggrolls"). If the text names no food vendor for an event, omit that event.
 - Times are 24h America/Chicago wall clock. If no start time is stated, omit the stop.
 - Resolve relative dates ("today", "this Friday") using TODAY given by the user. If a listing has no year, use the next occurrence on or after TODAY only if the listing plausibly refers to the upcoming weeks; omit clearly old/past listings. Never output dates before TODAY.
 - kind "popup" for pop-up kitchens/dinners at bars, breweries, markets; "truck_stop" for food trucks/trailers.

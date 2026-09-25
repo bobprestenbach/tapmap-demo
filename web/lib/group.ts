@@ -69,3 +69,14 @@ export function findNeighborhood(q: string) {
     null
   );
 }
+
+/** Drop exact duplicates coming from different sources (same place, title and start). */
+export function dedupe(items: Happening[]): Happening[] {
+  const best = new Map<string, Happening>();
+  for (const h of items) {
+    const k = `${groupKey(h)}|${h.title.trim().toLowerCase()}|${new Date(h.occ_start).getTime()}`;
+    const prev = best.get(k);
+    if (!prev || h.confidence > prev.confidence) best.set(k, h);
+  }
+  return items.filter((h) => best.get(`${groupKey(h)}|${h.title.trim().toLowerCase()}|${new Date(h.occ_start).getTime()}`) === h);
+}

@@ -171,6 +171,7 @@ serveJob("events_sync", async (ctx) => {
   const vi = new VenueIndex();
   await vi.load();
   ctx.counts.venues_loaded = vi.venues.length;
+  ctx.counts.venues_merged = await vi.mergeCreatedDuplicates();
 
   if (adapters.includes("ticketmaster")) {
     await runApiAdapter(ctx, vi, "tm", "ticketmaster", TM_URL, "ticketmaster",

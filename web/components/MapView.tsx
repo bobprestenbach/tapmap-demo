@@ -43,7 +43,11 @@ const SOON_MS = 2 * 3600_000;
 
 function styleUrl() {
   const key = process.env.NEXT_PUBLIC_MAPTILER_KEY;
-  const style = process.env.NEXT_PUBLIC_MAPTILER_STYLE || "streets-v2-dark";
+  const debugStyle =
+    typeof window !== "undefined" && window.location.search.includes("debug=1")
+      ? new URLSearchParams(window.location.search).get("style")
+      : null;
+  const style = debugStyle || process.env.NEXT_PUBLIC_MAPTILER_STYLE || "openstreetmap-dark";
   if (!key) {
     // Keyless fallback so the app still renders something in dev.
     return "https://demotiles.maplibre.org/style.json";
@@ -71,23 +75,35 @@ function toGeoJSON(groups: VenueGroup[], now: number): GeoJSON.FeatureCollection
   };
 }
 
-/** Palette tweaks so the MapTiler dark style sits closer to the TapMap navy/indigo reference. */
+/** Palette tweaks so the MapTiler dark style sits closer to the TapMap navy/indigo reference:
+ * muted streets, plum/pink highways, navy water, subdued parks. Unknown layers are left alone. */
 function tuneStyle(map: maplibregl.Map) {
   const style = map.getStyle();
   if (!style?.layers) return;
-  for (const layer of style.layers) {
+  const set = (id: string, prop: string, value: unknown) => {
     try {
-      if (layer.type === "background") {
-        map.setPaintProperty(layer.id, "background-color", "#0d0c1c");
-      } else if (layer.type === "fill" && /water/i.test(layer.id)) {
-        map.setPaintProperty(layer.id, "fill-color", "#0f1a33");
-      } else if (layer.type === "line" && /^water|river|waterway/i.test(layer.id)) {
-        map.setPaintProperty(layer.id, "line-color", "#13213f");
-      } else if (layer.type === "fill" && /(landcover|landuse|park|grass|wood)/i.test(layer.id)) {
-        map.setPaintProperty(layer.id, "fill-opacity", 0.35);
-      }
+      map.setPaintProperty(id, prop as Parameters<typeof map.setPaintProperty>[1], value);
     } catch {
-      /* layer may use expressions we don't override */
+      /* property not applicable */
+    }
+  };
+  for (const layer of style.layers) {
+    const id = layer.id;
+    const outline = /outline|casing/i.test(id);
+    if (layer.type === "background") set(id, "background-color", "#101019");
+    else if (layer.type === "fill" && /^water/i.test(id)) set(id, "fill-color", "#0f1a30");
+    else if (layer.type === "line" && /river|waterway/i.test(id)) set(id, "line-color", "#13213d");
+    else if (layer.type === "fill" && /park|grass|garden|wood|forest|recreation|cemetery|pitch|stadium|meadow/i.test(id))
+      set(id, "fill-opacity", 0.55);
+    else if (layer.type === "fill" && /commercial|retail|industrial|education|railway|military/i.test(id))
+      set(id, "fill-opacity", 0.35);
+    else if (layer.type === "line" && !outline) {
+      if (/highway/i.test(id)) set(id, "line-color", "#7d4256");
+      else if (/trunk|primary/i.test(id)) set(id, "line-color", "#4f3444");
+      else if (/secondary/i.test(id)) set(id, "line-color", "#393845");
+      else if (/tertiary|minor|service|street/i.test(id)) set(id, "line-color", "#2c2b36");
+    } else if (layer.type === "symbol" && /city|town|capital/i.test(id)) {
+      set(id, "text-color", "#9a93e6");
     }
   }
 }
@@ -245,7 +261,7 @@ export default function MapView(props: Props) {
         type: "geojson",
         data: toGeoJSON(propsRef.current.groups, propsRef.current.now),
         cluster: true,
-        clusterRadius: 44,
+        clusterRadius: 34,
         clusterMaxZoom: 14,
         clusterProperties,
       });
@@ -332,5 +348,9 @@ export default function MapView(props: Props) {
     }
   }, [props.userLoc]);
 
-  return <div ref={containerRef} className="tm-map" />;
+  return (
+    <div className="tm-map">
+      <div ref={containerRef} className="tm-map-inner" />
+    </div>
+  );
 }

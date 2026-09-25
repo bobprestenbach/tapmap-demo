@@ -4,7 +4,7 @@ import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CATEGORIES, CHIP_ORDER, LIVE_COLOR, toggleCategory } from "@/lib/categories";
 import { FETCH_RADIUS_M, NOLA_CENTER, SOON_MS, fetchHappenings, loadCache, saveCache } from "@/lib/data";
-import { findNeighborhood, groupByVenue, groupKey, matchesQuery } from "@/lib/group";
+import { dedupe, findNeighborhood, groupByVenue, groupKey, matchesQuery } from "@/lib/group";
 import { supabase } from "@/lib/supabase";
 import { haversineM } from "@/lib/time";
 import type { Category, Happening } from "@/lib/types";
@@ -73,7 +73,7 @@ export default function TapMapApp() {
         if (first) {
           first = false;
           setOrigin(p);
-          mapApi.current?.flyTo(p.lat, p.lng, 14);
+          mapApi.current?.flyTo(p.lat, p.lng, DEFAULT_ZOOM + 0.2);
         }
       },
       () => {},
@@ -139,7 +139,7 @@ export default function TapMapApp() {
 
   // Items whose occurrence has ended since the last fetch drop out; live flag re-evaluated locally.
   const current = useMemo(() => {
-    return items
+    return dedupe(items)
       .filter((h) => new Date(h.occ_end).getTime() > now)
       .map((h) => {
         const live = new Date(h.occ_start).getTime() <= now;
@@ -155,8 +155,15 @@ export default function TapMapApp() {
     return text.length === 0 && hoodMatch ? base : text;
   }, [current, cats, liveOnly, query, hoodMatch]);
 
-  const groups = useMemo(() => groupByVenue(filtered), [filtered]);
-  const groupsByKey = useMemo(() => new Map(groups.map((g) => [g.key, g])), [groups]);
+  // Map shows live + starting-soon pins; later-tonight items stay in the list unless nothing sooner exists.
+  const mapItems = useMemo(() => {
+    const soon = filtered.filter((h) => h.is_live || new Date(h.occ_start).getTime() - now <= SOON_MS);
+    return soon.length ? soon : filtered;
+  }, [filtered, now]);
+  const groups = useMemo(() => groupByVenue(mapItems), [mapItems]);
+  // Groups for detail lookup include every item (so list taps on later items still open a card).
+  const allGroups = useMemo(() => groupByVenue(filtered), [filtered]);
+  const groupsByKey = useMemo(() => new Map(allGroups.map((g) => [g.key, g])), [allGroups]);
   const selected = selectedKey ? groupsByKey.get(selectedKey) ?? null : null;
 
   const inView = useCallback(

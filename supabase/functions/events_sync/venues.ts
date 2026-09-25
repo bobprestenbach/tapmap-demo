@@ -7,7 +7,7 @@ import { politeFetch } from "../_shared/http.ts";
 import { geocodeStreet, searchPlace } from "./geocode.ts";
 import { decodeEntities, Deadline, inOrleansBox, RawEvent } from "./types.ts";
 
-type V = { id: string; name: string; category: string; data_source: string; lat: number; lng: number; address: string | null };
+type V = { id: string; name: string; category: string; data_source: string; lat: number; lng: number; address: string | null; neighborhood: string | null };
 type CacheRow = {
   key: string; name: string; address?: string | null; website?: string | null;
   lat?: number | null; lng?: number | null; venue_id?: string | null;
@@ -84,16 +84,76 @@ export class VenueIndex {
     for (const r of rows ?? []) this.cache.set(r.key, r as CacheRow);
   }
 
-  /** Best venue within radiusM with similarity >= minSim. Ties prefer non-generated (osm/google/curated). */
-  matchNear(name: string, lat: number, lng: number, minSim = 0.75, radiusM = 150): V | null {
+  /**
+   * Best nearby venue. Accepts similarity >= strongSim within strongRadiusM (source coordinates for the same
+   * venue can differ by a few hundred metres, e.g. Ticketmaster vs OSM), or >= minSim within radiusM.
+   * Ties prefer non-generated venues (osm/google/curated).
+   */
+  matchNear(name: string, lat: number, lng: number, minSim = 0.75, radiusM = 150, strongSim = 0.85, strongRadiusM = 500): V | null {
     let best: V | null = null, bestScore = -1;
     for (const v of this.venues) {
       const d = haversineM({ lat, lng }, v);
-      if (d > radiusM) continue;
+      if (d > Math.max(radiusM, strongRadiusM)) continue;
       const s = sim(name, v.name);
-      if (s < minSim) continue;
-      const score = s + (CREATED_SOURCES.has(v.data_source) ? 0 : 0.01) - d / 100000;
+      if (!((s >= minSim && d <= radiusM) || (s >= strongSim && d <= strongRadiusM))) continue;
+      const score = s + (CREATED_SOURCES.has(v.data_source) ? 0 : 0.05) - d / 10000;
       if (score > bestScore) { best = v; bestScore = score; }
+    }
+    return best;
+  }
+
+  /**
+   * Merge venues events_sync created (data_source ticketmaster/wwoz) into a canonical venue imported later
+   * (osm/google/curated) when they match by the same rules: re-point happenings/cache/sources, then delete.
+   */
+  async mergeCreatedDuplicates(): Promise<number> {
+    let merged = 0;
+    for (const dup of this.venues.filter((v) => CREATED_SOURCES.has(v.data_source))) {
+      let canon: V | null = null, bestScore = -1;
+      for (const v of this.venues) {
+        if (CREATED_SOURCES.has(v.data_source)) continue;
+        const d = haversineM(dup, v);
+        if (d > 500) continue;
+        const s = sim(dup.name, v.name);
+        if (!((s >= 0.75 && d <= 150) || (s >= 0.85 && d <= 500))) continue;
+        if (s - d / 10000 > bestScore) { canon = v; bestScore = s - d / 10000; }
+      }
+      if (!canon) continue;
+      const c = db();
+      const r1 = await c.from("happenings").update({ venue_id: canon.id }).eq("venue_id", dup.id);
+      const r2 = await c.from("event_venue_cache").update({ venue_id: canon.id }).eq("venue_id", dup.id);
+      const r3 = await c.from("sources").update({ venue_id: canon.id }).eq("venue_id", dup.id);
+      const r4 = await c.from("reports").update({ venue_id: canon.id }).eq("venue_id", dup.id);
+      if (r1.error || r2.error || r3.error || r4.error) continue;
+      const { error } = await c.from("venues").delete().eq("id", dup.id).in("data_source", [...CREATED_SOURCES]);
+      if (error) continue;
+      for (const row of this.cache.values()) if (row.venue_id === dup.id) row.venue_id = canon.id;
+      this.venues = this.venues.filter((v) => v.id !== dup.id);
+      this.byId.delete(dup.id);
+      merged++;
+    }
+    return merged;
+  }
+
+  /** Venue with the same street number + street name ("1436 Oretha Castle Haley Blvd" ~ "1436 Oretha Castle Haley Boulevard"). */
+  matchByAddress(address: string | null): V | null {
+    const key = (a: string | null) => {
+      const m = (a ?? "").toLowerCase().replace(/[.,#]/g, " ").match(/^\s*(\d+)\s+(?:(?:n|s|e|w|north|south|east|west|saint|st)\s+)?([a-z0-9]+)/);
+      return m ? `${m[1]} ${m[2]}` : null;
+    };
+    const k = key(address);
+    if (!k) return null;
+    const hits = this.venues.filter((v) => key(v.address) === k);
+    return hits.find((v) => !CREATED_SOURCES.has(v.data_source)) ?? hits[0] ?? null;
+  }
+
+  /** Neighborhood of the nearest venue that has one (within 1.5 km). */
+  nearestNeighborhood(lat: number, lng: number): string | null {
+    let best: string | null = null, bestD = 1500;
+    for (const v of this.venues) {
+      if (!v.neighborhood) continue;
+      const d = haversineM({ lat, lng }, v);
+      if (d < bestD) { bestD = d; best = v.neighborhood; }
     }
     return best;
   }
@@ -119,12 +179,13 @@ export class VenueIndex {
   }
 
   async createVenue(v: { name: string; category: string; lat: number; lng: number; address?: string | null; website?: string | null; data_source: string }): Promise<string | null> {
+    const neighborhood = this.nearestNeighborhood(v.lat, v.lng);
     const { data, error } = await db().from("venues").insert({
-      name: v.name, category: v.category, location: point(v.lat, v.lng),
+      name: v.name, category: v.category, location: point(v.lat, v.lng), neighborhood,
       address: v.address ?? null, website: v.website ?? null, data_source: v.data_source,
     }).select("id").single();
     if (error || !data) { console.error("venue insert", v.name, error?.message); return null; }
-    const row: V = { id: data.id, name: v.name, category: v.category, data_source: v.data_source, lat: v.lat, lng: v.lng, address: v.address ?? null };
+    const row: V = { id: data.id, name: v.name, category: v.category, data_source: v.data_source, lat: v.lat, lng: v.lng, address: v.address ?? null, neighborhood };
     this.venues.push(row);
     this.byId.set(row.id, row);
     this.created++;
@@ -154,7 +215,7 @@ export class VenueIndex {
       }
     }
     if (lat == null || lng == null) return { venueId: null, how: "no_coords" };
-    const m = this.matchNear(name, lat, lng, 0.75, 150);
+    const m = this.matchNear(name, lat, lng);
     if (m) {
       await this.saveCache({ key, name, address, lat, lng, venue_id: m.id, status: "resolved", meta: { how: "match", geocoded: !!ev.venue.suspectCoords } });
       return { venueId: m.id, how: "matched" };
@@ -217,6 +278,11 @@ export class VenueIndex {
       } catch (e) {
         console.error("wwoz org fetch", orgUrl, e);
       }
+      const byAddr = this.matchByAddress(address);
+      if (byAddr) {
+        await this.saveCache({ key, name, address, website, venue_id: byAddr.id, lat: byAddr.lat, lng: byAddr.lng, status: "resolved", meta: { how: "address" } });
+        return { venueId: byAddr.id, how: "address_matched" };
+      }
       if (address) {
         geo = await geocodeStreet(address.split(",")[0]);
       }
@@ -232,7 +298,7 @@ export class VenueIndex {
       await this.saveCache({ key, name, address, website, lat: geo.lat, lng: geo.lng, status: "outside", meta: { display: geo.display } });
       return { venueId: null, how: "outside" };
     }
-    const near = this.matchNear(name, geo.lat, geo.lng, 0.6, 150);
+    const near = this.matchNear(name, geo.lat, geo.lng, 0.7, 150);
     const id = near?.id ?? await this.createVenue({
       name, category: "music_venue", lat: geo.lat, lng: geo.lng, address, website, data_source: "wwoz",
     });

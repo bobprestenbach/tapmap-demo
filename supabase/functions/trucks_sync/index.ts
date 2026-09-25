@@ -38,6 +38,8 @@ const TIME_BUDGET_MS = 110_000;
 const MAX_KM_FROM_CENTER = 20; // Orleans Parish + immediate surroundings
 const MAX_GEOCODES_PER_RUN = 10;
 const MAX_DAYS_AHEAD = 45;
+// LLM sometimes names the vendor generically ("Food pop-ups"); those are not a real truck.
+const GENERIC_NAME = /^(the\s+)?((food|local|rotating|various|guest)\s+)*(pop[\s-]?ups?|food\s*trucks?|trucks?|vendors?|food|kitchen|tbd|tba)$/i;
 
 // ---------------------------------------------------------------------------
 // venues + sources
@@ -180,10 +182,15 @@ async function locate(ctx: JobCtx, s: RawStop): Promise<{ lat: number; lng: numb
 // ---------------------------------------------------------------------------
 // stops -> happenings
 // ---------------------------------------------------------------------------
+const squash = (x: string) => normName(x).replace(/\s+/g, "");
+
 function resolveTruck(s: RawStop, src: SourceRow): Truck | null {
   let best: Truck | null = null, score = 0;
+  const sq = squash(s.truck ?? "");
   for (const t of TRUCKS) {
-    const v = nameSimilarity(s.truck ?? "", t.name);
+    let v = nameSimilarity(s.truck ?? "", t.name);
+    const tq = squash(t.name);
+    if (tq.length >= 5 && sq.length >= 5 && (sq.includes(tq) || tq.includes(sq))) v = Math.max(v, 0.9);
     if (v > score) { score = v; best = t; }
   }
   if (best && score >= 0.8) return best;
@@ -219,7 +226,8 @@ async function storeStops(
   const rows = new Map<string, Record<string, unknown>>();
 
   for (const s of stops) {
-    if (!s?.truck || !s.start) { inc(ctx, "stops_incomplete"); continue; }
+    if (!s?.truck || !s.start) { inc(ctx, "stops_incomplete"); ctx.log("incomplete stop", src.url, JSON.stringify(s).slice(0, 200)); continue; }
+    if (GENERIC_NAME.test(s.truck.trim())) { inc(ctx, "stops_generic_name"); continue; }
     const truck = resolveTruck(s, src);
     const kind = s.kind === "popup" || s.kind === "truck_stop" ? s.kind : truck?.category === "popup" ? "popup" : "truck_stop";
     const truckName = truck?.name ?? s.truck.trim();

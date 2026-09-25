@@ -1,7 +1,6 @@
 /* TapMap service worker: offline app shell + network-first data. */
 const VERSION = "tapmap-v1";
 const SHELL = `${VERSION}-shell`;
-const RUNTIME = `${VERSION}-runtime`;
 const SHELL_URLS = ["/", "/manifest.webmanifest", "/icons/icon-192.png", "/icons/icon-512.png", "/apple-touch-icon.png"];
 
 self.addEventListener("install", (event) => {
@@ -22,20 +21,11 @@ self.addEventListener("activate", (event) => {
   );
 });
 
-const RUNTIME_MAX = 300;
-async function trim(cache) {
-  const keys = await cache.keys();
-  for (let i = 0; i < keys.length - RUNTIME_MAX; i++) await cache.delete(keys[i]);
-}
-
 async function networkFirst(req, cacheName) {
   const cache = await caches.open(cacheName);
   try {
     const res = await fetch(req);
-    if (res && res.ok) {
-      await cache.put(req, res.clone());
-      if (cacheName === RUNTIME) trim(cache);
-    }
+    if (res && res.ok) await cache.put(req, res.clone());
     return res;
   } catch (err) {
     const hit = await cache.match(req);
@@ -75,8 +65,6 @@ self.addEventListener("fetch", (event) => {
     return;
   }
 
-  // Map style/fonts/sprites and Supabase GETs: network-first with cached fallback.
-  if (url.hostname.endsWith("maptiler.com") || url.hostname.endsWith("supabase.co")) {
-    event.respondWith(networkFirst(req, RUNTIME));
-  }
+  // Everything else (map tiles, Supabase) goes straight to the network; the app keeps its own
+  // last-results cache in localStorage for offline use.
 });

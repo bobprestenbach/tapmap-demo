@@ -41,9 +41,13 @@ const page = await ctx.newPage();
 page.on("console", (m) => m.type() === "error" && console.log("[console]", m.text()));
 page.on("requestfailed", (r) => console.log("[failed]", r.url().replace(/key=[^&]+/, "key=***").slice(0, 120), r.failure()?.errorText));
 page.on("pageerror", (e) => console.log("[pageerror]", e.message));
-const target = flags.has("--mock") ? `${url}${url.includes("?") ? "&" : "?"}mock=1` : url;
-await page.goto(target, { waitUntil: "networkidle", timeout: 60000 }).catch((e) => console.log("goto:", e.message));
-await page.waitForTimeout(6000);
+const target = `${url}${url.includes("?") ? "&" : "?"}debug=1${flags.has("--mock") ? "&mock=1" : ""}`;
+await page.goto(target, { waitUntil: "load", timeout: 60000 }).catch((e) => console.log("goto:", e.message));
+// Tiles come through a slow proxy in CI: wait for the map to go idle (max 60s).
+await page
+  .waitForFunction(() => { const m = window.__tmMap; return m && m.loaded() && m.areTilesLoaded(); }, null, { timeout: 60000, polling: 500 })
+  .catch(() => console.log("map did not report idle in time"));
+await page.waitForTimeout(2500);
 if (flags.has("--click-first")) {
   await page.locator(".tm-marker").first().click({ force: true }).catch((e) => console.log("click:", e.message));
   await page.waitForTimeout(1500);
