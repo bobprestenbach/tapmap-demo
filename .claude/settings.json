@@ -1,0 +1,26 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(npx supabase *)",
+      "Bash(npx -y supabase *)",
+      "Bash(npx supabase@latest *)",
+      "Bash(npx -y supabase@latest *)",
+      "Bash(npx deno *)",
+      "Bash(npx -y deno *)",
+      "Bash(npx *)",
+      "Bash(npm *)",
+      "Bash(pnpm *)",
+      "Bash(node *)",
+      "Bash(curl *)",
+      "Bash(git status *)",
+      "Bash(git add *)",
+      "Bash(git commit *)",
+      "Bash(git push *)",
+      "Bash(git diff *)",
+      "Bash(git log *)",
+      "Bash(scripts/*.sh *)",
+      "Bash(./scripts/*.sh *)",
+      "mcp__Supabase__*"
+    ]
+  }
+}
