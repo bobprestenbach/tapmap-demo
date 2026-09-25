@@ -5,9 +5,15 @@
 //   osm     Overpass (bars, pubs, restaurants, nightclubs, beer gardens, music venues, live_music=yes) in
 //           the city's bbox, filtered to its polygon; chains/fast food skipped; restaurants without a
 //           website kept (Google fills them in). Upserted through places_sync/common.ts upsertVenues().
+//   discover  Only when OSM kept < 25 venues (thinly mapped towns). Free IDs-only Text Search ("bars in X",
+//           "restaurants in X", "live music in X"; 3 pages each, restricted to the city bbox), ids already on a
+//           venue dropped, then Place Details for NEW ids only (<= 150 per city per cycle); places inside the
+//           polygon that aren't chains are upserted as data_source='google'. Rejected ids are remembered in
+//           cities.counts.discover_rejected so a resumed run never buys them twice.
 //   enrich  Venues with no website: Google Text Search (IDs Only, free) -> Place Details (Enterprise SKU)
-//           -> fill null fields when the name/location match. Capped per cycle by enrich_max_per_city;
-//           non-prewarm cities skip it when the month's budget has < $1 left. Spend -> api_usage.
+//           -> fill null fields when the name/location match. Capped per cycle by enrich_max_per_city.
+// Budget: every Details call (discover + enrich, prewarm cities included) stops when the month's
+// budget_status().remaining_usd drops below $1. Spend -> api_usage, one row per SKU per invocation.
 //   events  Pokes events_sync (Ticketmaster for this city) and website_sync (this city's sites), then
 //           marks the city ready/done and refreshes its counts.
 // Phases chain within one invocation while time allows; otherwise the claim is released and the job
@@ -15,9 +21,11 @@
 import { db, flag } from "../_shared/db.ts";
 import { budgetStatus, UsageTally } from "../_shared/budget.ts";
 import { haversineM, nameSimilarity } from "../_shared/geo.ts";
-import { findPlaceId, GoogleError, placeDetails, PRICE_LEVEL, SKU_DETAILS_ENTERPRISE, SKU_TEXT_IDS } from "../_shared/google.ts";
+import {
+  findPlaceId, GoogleError, PlaceDetails, placeDetails, PRICE_LEVEL, searchPlaceIds, SKU_DETAILS_ENTERPRISE, SKU_TEXT_IDS,
+} from "../_shared/google.ts";
 import { inc, JobCtx, serveJob } from "../_shared/job.ts";
-import { dedupeBatch, neighborhoodFor, normalizeUrl, upsertVenues } from "../places_sync/common.ts";
+import { CHAIN_RE, dedupeBatch, neighborhoodFor, normalizeUrl, upsertVenues, VenueIn } from "../places_sync/common.ts";
 import { mapOsmElements, overpass, venueQuery } from "../places_sync/osm.ts";
 import { Geometry, pointInGeometry } from "./pip.ts";
 
@@ -26,6 +34,17 @@ const BUDGET_MS = 110_000;
 const NEW_ORLEANS = "2255000";
 const ENRICH_CONCURRENCY = 5;
 const DETAILS_USD = 0.02; // local running estimate while enriching (the ledger prices the free tier exactly)
+const MIN_REMAINING_USD = 1; // no Details calls once the month's remaining budget is below this
+const DISCOVER_BELOW = 25; // run Google discovery when OSM kept fewer venues than this
+const DISCOVER_MAX_DETAILS = 150; // Details calls per city per cycle for discovery
+const DISCOVER_QUERIES: { q: string; type?: string; music?: boolean }[] = [
+  { q: "bars", type: "bar" },
+  { q: "restaurants", type: "restaurant" },
+  { q: "live music", music: true },
+];
+const BAR_TYPES = ["bar", "night_club", "pub", "wine_bar", "cocktail_bar", "lounge_bar", "sports_bar", "beer_garden", "brewpub", "brewery"];
+const MUSIC_TYPES = ["live_music_venue", "concert_hall", "performing_arts_theater", "amphitheatre"];
+const SKIP_TYPES = ["fast_food_restaurant", "meal_takeaway", "coffee_shop", "cafe", "bakery", "ice_cream_shop", "donut_shop"];
 
 type City = {
   id: string; name: string; state: string; status: string; phase: string | null; prewarm: boolean; attempts: number;
@@ -80,29 +99,147 @@ async function kick(fn: string, body: Record<string, unknown>, ctx: JobCtx) {
 // ---------------------------------------------------------------------------
 // phase: osm
 // ---------------------------------------------------------------------------
-/** Returns false when the upsert ran out of time (rows already written come back "unchanged" next run). */
-async function phaseOsm(ctx: JobCtx, city: City, deadline: number): Promise<boolean> {
-  await mergeCityCounts(city.id, { cycle_started_at: new Date().toISOString() });
+/** Neighborhood label for a point in the city (New Orleans: its neighborhoods), or null when outside it. */
+function hoodFor(city: City) {
+  const isNola = city.id === NEW_ORLEANS;
+  return (lat: number, lng: number): string | null => {
+    if (!pointInGeometry(lat, lng, city.geojson)) return null;
+    return isNola ? neighborhoodFor(lat, lng) ?? city.name : city.name;
+  };
+}
+
+/**
+ * Returns the number of venues OSM kept, or null when the upsert ran out of time (rows already written
+ * come back "unchanged" on the next run).
+ */
+async function phaseOsm(ctx: JobCtx, city: City, deadline: number): Promise<number | null> {
+  await mergeCityCounts(city.id, { cycle_started_at: new Date().toISOString(), discover_details: 0, discover_rejected: [] });
   const q = venueQuery(city.s, city.w, city.n, city.e, 60);
   const els = await overpass(q, 60_000, ctx.log, deadline - 15_000);
-  const isNola = city.id === NEW_ORLEANS;
-  const { venues, stats } = mapOsmElements(els, {
-    includeNoWebsite: true,
-    cityName: city.name,
-    hoodFor: (lat, lng) => {
-      if (!pointInGeometry(lat, lng, city.geojson)) return null;
-      return isNola ? neighborhoodFor(lat, lng) ?? city.name : city.name;
-    },
-  });
+  const { venues, stats } = mapOsmElements(els, { includeNoWebsite: true, cityName: city.name, hoodFor: hoodFor(city) });
   ctx.counts.osm_raw = stats.raw;
   ctx.counts.osm_skipped_chain = stats.skipped_chain;
   ctx.counts.osm_outside = stats.skipped_outside;
   const deduped = dedupeBatch(venues);
   ctx.counts.osm_candidates = deduped.length;
   await upsertVenues(ctx, deduped, deadline - 5_000);
-  if (ctx.counts.skipped_deadline) return false;
+  if (ctx.counts.skipped_deadline) return null;
   await mergeCityCounts(city.id, { osm_raw: stats.raw, osm_candidates: deduped.length });
-  return true;
+  return deduped.length;
+}
+
+// ---------------------------------------------------------------------------
+// phase: discover (Google, thin-OSM fallback)
+// ---------------------------------------------------------------------------
+function googleEnabled() {
+  return flag("ENABLE_GOOGLE_PLACES") && !!Deno.env.get("GOOGLE_PLACES_API_KEY");
+}
+
+/** Map a Place Details result to a venue; null (with a reason) when it isn't one we list. */
+function discoveredVenue(d: PlaceDetails, city: City, music: boolean): { v: VenueIn | null; reason?: string } {
+  if (!d.location || !d.displayName?.text) return { v: null, reason: "incomplete" };
+  const name = d.displayName.text, lat = d.location.latitude, lng = d.location.longitude;
+  const hood = hoodFor(city)(lat, lng);
+  if (!hood) return { v: null, reason: "outside" };
+  const types = d.types ?? [];
+  if (CHAIN_RE.test(name) || (d.primaryType && SKIP_TYPES.includes(d.primaryType)) ||
+    types.includes("fast_food_restaurant")) return { v: null, reason: "chain" };
+  const isBar = types.some((t) => BAR_TYPES.includes(t));
+  const isMusic = types.some((t) => MUSIC_TYPES.includes(t)) ||
+    (music && /\b(jazz|music|blues|zydeco|cajun dance|dance hall|theat(er|re)|hall)\b/i.test(name));
+  const isFood = types.some((t) => t === "restaurant" || (t.endsWith("_restaurant") && !SKIP_TYPES.includes(t)));
+  if (!isBar && !isMusic && !isFood) return { v: null, reason: "other" };
+  const website = normalizeUrl(d.websiteUri);
+  return {
+    v: {
+      name, lat, lng, category: isMusic ? "music_venue" : isBar ? "bar" : "restaurant",
+      address: d.formattedAddress ?? null, neighborhood: hood, website, phone: d.nationalPhoneNumber ?? null,
+      opening_hours: d.regularOpeningHours ? { google: d.regularOpeningHours } : null,
+      price_level: d.priceLevel ? PRICE_LEVEL[d.priceLevel] ?? null : null, rating: d.rating ?? null,
+      google_place_id: d.id, data_source: "google", quality: (website ? 4 : 0) + (d.regularOpeningHours ? 2 : 0),
+    },
+  };
+}
+
+async function phaseDiscover(ctx: JobCtx, city: City, deadline: number): Promise<EnrichResult> {
+  if (!googleEnabled()) { ctx.counts.discover_skipped = "google disabled"; return "done"; }
+  const budget = await budgetStatus();
+  ctx.counts.budget_remaining_usd = Math.round(budget.remaining_usd * 100) / 100;
+  if (budget.remaining_usd < MIN_REMAINING_USD) { ctx.counts.discover_skipped = "budget"; return "done"; }
+  const cc = await cityCounts(city.id);
+  let used = Number(cc.discover_details ?? 0);
+  const rejected = new Set<string>(Array.isArray(cc.discover_rejected) ? cc.discover_rejected as string[] : []);
+  if (used >= DISCOVER_MAX_DETAILS) { ctx.counts.discover_cap_hit = DISCOVER_MAX_DETAILS; return "done"; }
+
+  const tally = new UsageTally("google", JOB, city.id);
+  const found: VenueIn[] = [];
+  let stopReason: string | null = null;
+  try {
+    // 1. free IDs-only searches
+    const rect = { s: city.s, w: city.w, n: city.n, e: city.e };
+    const all = new Set<string>(), musicIds = new Set<string>();
+    for (const { q, type, music } of DISCOVER_QUERIES) {
+      const { ids, requests } = await searchPlaceIds(`${q} in ${city.name}, ${city.state}`, rect, { includedType: type, maxPages: 3 });
+      tally.add(SKU_TEXT_IDS, requests);
+      for (const id of ids) { all.add(id); if (music) musicIds.add(id); }
+    }
+    ctx.counts.discover_ids = all.size;
+    // 2. drop ids already on a venue or rejected earlier this cycle
+    const known = new Set<string>();
+    const idList = [...all];
+    for (let i = 0; i < idList.length; i += 150) {
+      const { data, error } = await db().from("venues").select("google_place_id").in("google_place_id", idList.slice(i, i + 150));
+      if (error) throw new Error(`known ids: ${error.message}`);
+      for (const r of data ?? []) known.add(r.google_place_id as string);
+    }
+    const queue = idList.filter((id) => !known.has(id) && !rejected.has(id));
+    ctx.counts.discover_new_ids = queue.length;
+    // 3. Details for new ids only
+    const worker = async () => {
+      while (queue.length && !stopReason) {
+        if (Date.now() > deadline - 25_000) { stopReason = "time"; return; }
+        if (used >= DISCOVER_MAX_DETAILS) { stopReason = "cap"; return; }
+        if (budget.remaining_usd - tally.get(SKU_DETAILS_ENTERPRISE) * DETAILS_USD < MIN_REMAINING_USD) { stopReason = "budget"; return; }
+        const id = queue.shift()!;
+        used++;
+        tally.add(SKU_DETAILS_ENTERPRISE);
+        try {
+          const d = await placeDetails(id, true);
+          const { v, reason } = d ? discoveredVenue(d, city, musicIds.has(id)) : { v: null, reason: "gone" };
+          if (v) found.push(v); else { rejected.add(id); inc(ctx, `discover_${reason}`); }
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          if (e instanceof GoogleError && (e.status === 429 || e.status === 403 || e.status >= 500)) { stopReason = `google: ${msg}`; return; }
+          rejected.add(id);
+          inc(ctx, "discover_error");
+          ctx.log("discover", id, msg);
+        }
+      }
+    };
+    await Promise.all(Array.from({ length: ENRICH_CONCURRENCY }, worker));
+  } finally {
+    // 4. persist what was bought, even when stopping early
+    if (found.length) {
+      const deduped = dedupeBatch(found);
+      ctx.counts.discover_found = deduped.length;
+      await upsertVenues(ctx, deduped, deadline + 60_000); // details are paid for: never drop them on the deadline
+      const now = new Date().toISOString();
+      const { error } = await db().from("venues").update({ enriched_at: now, enrich_status: "ok" })
+        .in("google_place_id", deduped.map((v) => v.google_place_id!)).is("enriched_at", null);
+      if (error) ctx.log("discover mark", error.message);
+    }
+    await mergeCityCounts(city.id, { discover_details: used, discover_rejected: [...rejected] });
+    ctx.counts.google_ids = Number(ctx.counts.google_ids ?? 0) + tally.get(SKU_TEXT_IDS);
+    ctx.counts.google_details = Number(ctx.counts.google_details ?? 0) + tally.get(SKU_DETAILS_ENTERPRISE);
+    ctx.counts.discover_details = tally.get(SKU_DETAILS_ENTERPRISE);
+    const usd = await tally.flush();
+    ctx.counts.est_usd = Math.round((Number(ctx.counts.est_usd ?? 0) + usd) * 10000) / 10000;
+  }
+  const stop = stopReason as string | null;
+  if (stop?.startsWith("google:")) throw new Error(stop);
+  if (stop === "budget") ctx.counts.discover_skipped = "budget";
+  if (stop === "cap") ctx.counts.discover_cap_hit = DISCOVER_MAX_DETAILS;
+  return stop === "time" ? "more" : "done";
 }
 
 // ---------------------------------------------------------------------------
@@ -165,7 +302,7 @@ async function enrichOne(v: EnrichRow, city: City, tally: UsageTally, ctx: JobCt
 }
 
 async function phaseEnrich(ctx: JobCtx, city: City, deadline: number): Promise<EnrichResult> {
-  if (!flag("ENABLE_GOOGLE_PLACES") || !Deno.env.get("GOOGLE_PLACES_API_KEY")) {
+  if (!googleEnabled()) {
     ctx.counts.enrich_skipped = "google disabled";
     return "done";
   }
@@ -179,7 +316,7 @@ async function phaseEnrich(ctx: JobCtx, city: City, deadline: number): Promise<E
 
   const budget = await budgetStatus();
   ctx.counts.budget_remaining_usd = Math.round(budget.remaining_usd * 100) / 100;
-  const overBudget = (extra: number) => !city.prewarm && budget.remaining_usd - extra < 1;
+  const overBudget = (extra: number) => budget.remaining_usd - extra < MIN_REMAINING_USD;
   if (overBudget(0)) {
     const { data } = await db().rpc("venues_to_enrich", { p_city_id: city.id, p_limit: 1000 });
     ctx.counts.budget_skipped = (data ?? []).length;
@@ -268,7 +405,12 @@ serveJob(JOB, async (ctx) => {
       const left = deadline - Date.now();
       if (phase === "osm") {
         if (left < 60_000) break;
-        if (!(await phaseOsm(ctx, city, deadline))) break;
+        const kept = await phaseOsm(ctx, city, deadline);
+        if (kept == null) break;
+        phase = kept < DISCOVER_BELOW ? "discover" : "enrich";
+      } else if (phase === "discover") {
+        if (left < 40_000) break;
+        if ((await phaseDiscover(ctx, city, deadline)) === "more") break;
         phase = "enrich";
       } else if (phase === "enrich") {
         if (left < 20_000) break;

@@ -28,6 +28,8 @@ export type PlaceDetails = {
   rating?: number;
   priceLevel?: string;
   nationalPhoneNumber?: string;
+  types?: string[];
+  primaryType?: string;
 };
 
 /** HTTP error from Google; `status` lets callers tell quota/auth failures from per-place misses. */
@@ -60,10 +62,46 @@ export async function findPlaceId(
   return j.places?.[0]?.id ?? null;
 }
 
-/** Place Details (Enterprise SKU). Returns null on 404 (stale id). */
-export async function placeDetails(id: string): Promise<PlaceDetails | null> {
+export type Rect = { s: number; w: number; n: number; e: number };
+
+/**
+ * Paged Text Search (IDs Only, free) restricted to a rectangle. Returns place ids and the number of
+ * requests made (each page is one billable-SKU request, priced at $0).
+ */
+export async function searchPlaceIds(
+  textQuery: string, rect: Rect, opts: { includedType?: string; maxPages?: number } = {},
+): Promise<{ ids: string[]; requests: number }> {
+  const ids: string[] = [];
+  let requests = 0, pageToken: string | undefined;
+  for (let page = 0; page < (opts.maxPages ?? 3); page++) {
+    const body: Record<string, unknown> = {
+      textQuery, pageSize: 20,
+      locationRestriction: {
+        rectangle: { low: { latitude: rect.s, longitude: rect.w }, high: { latitude: rect.n, longitude: rect.e } },
+      },
+    };
+    if (opts.includedType) body.includedType = opts.includedType;
+    if (pageToken) body.pageToken = pageToken;
+    requests++;
+    const r = await fetch(TEXT_SEARCH, {
+      method: "POST",
+      headers: { "content-type": "application/json", "X-Goog-Api-Key": apiKey(), "X-Goog-FieldMask": "places.id,nextPageToken" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(15000),
+    });
+    if (!r.ok) throw new GoogleError(r.status, `searchText ${r.status}: ${(await r.text()).slice(0, 200)}`);
+    const j = (await r.json()) as { places?: { id: string }[]; nextPageToken?: string };
+    for (const p of j.places ?? []) ids.push(p.id);
+    pageToken = j.nextPageToken;
+    if (!pageToken) break;
+  }
+  return { ids, requests };
+}
+
+/** Place Details (Enterprise SKU). `withTypes` adds types/primaryType (Essentials fields, same SKU). Null on 404. */
+export async function placeDetails(id: string, withTypes = false): Promise<PlaceDetails | null> {
   const r = await fetch(DETAILS + encodeURIComponent(id), {
-    headers: { "X-Goog-Api-Key": apiKey(), "X-Goog-FieldMask": DETAILS_MASK },
+    headers: { "X-Goog-Api-Key": apiKey(), "X-Goog-FieldMask": withTypes ? DETAILS_MASK + ",types,primaryType" : DETAILS_MASK },
     signal: AbortSignal.timeout(15000),
   });
   if (r.status === 404) return null;

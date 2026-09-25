@@ -74,3 +74,8 @@ begin
 end $$;
 revoke all on function public.kick_job(text, jsonb) from public, anon, authenticated;
 grant execute on function public.kick_job(text, jsonb) to service_role;
+
+-- Google Details per city per cycle for the enrich phase: 600 -> 300 (keeps prewarm under the monthly cap).
+-- Only replaces the original default, so a value changed later in the admin is left alone.
+update public.app_settings set value = '300'::jsonb, updated_at = now()
+ where key = 'enrich_max_per_city' and value = '600'::jsonb;
