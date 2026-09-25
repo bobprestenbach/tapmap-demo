@@ -165,7 +165,7 @@ export function parseJsonLdEvents(html: string, pageUrl: string, today: string):
       if (isNaN(+start)) continue;
       // If no explicit offset, treat as Chicago wall clock.
       const hasTz = /(Z|[+-]\d{2}:?\d{2})$/.test(sd);
-      // Chain sites list other cities' events: require a Central-time offset and a NOLA-ish address.
+      // Chain sites list other cities' events: require a Central-time offset and a Louisiana address.
       if (hasTz && !/-0[56]:?00$/.test(sd)) continue;
       const loc = JSON.stringify(n.location ?? "");
       if (/addressLocality|addressRegion/.test(loc) && !/new orleans|nola|metairie|\bLA\b|louisiana/i.test(loc)) continue;
@@ -255,7 +255,7 @@ export function parseDays(v: unknown): number[] | null {
 // ---------------------------------------------------------------------------
 // LLM prompt + validation
 // ---------------------------------------------------------------------------
-export const SYSTEM_PROMPT = `You extract happenings at ONE New Orleans hospitality venue (bar, restaurant, music venue) from text scraped from its own website.
+export const SYSTEM_PROMPT = `You extract happenings at ONE Louisiana hospitality venue (bar, restaurant, music venue) from text scraped from its own website.
 Return ONLY a JSON object, no prose:
 {"happenings":[{"kind":"happy_hour|special|live_music|event|popup","title":string,"description":string|null,"price_text":string|null,"days_of_week":[0-6]|null,"start_time":"HH:MM"|null,"end_time":"HH:MM"|null,"date":"YYYY-MM-DD"|null,"all_day":bool,"confidence":0-1,"evidence":string,"page":int}]}
 
@@ -272,7 +272,7 @@ Rules:
 - Private events, catering, gift cards, reservations, and generic menu items are NOT happenings.
 - Recurring items: days_of_week uses 0=Sunday..6=Saturday ("daily"/"every day" = all 7 days, "weekdays" = [1,2,3,4,5]); date=null.
 - One-off items: date = the calendar date (YYYY-MM-DD); days_of_week=null. Skip anything dated before today. If a date omits the year, use the next occurrence on or after today. Skip one-offs more than 60 days out.
-- Times are 24h "HH:MM" local New Orleans time. "4-7pm" = 16:00-19:00. "till close"/"late"/unstated end = end_time null. "10pm-2am" = start 22:00 end 02:00.
+- Times are 24h "HH:MM" local time (US Central, America/Chicago). "4-7pm" = 16:00-19:00. "till close"/"late"/unstated end = end_time null. "10pm-2am" = start 22:00 end 02:00.
 - A happy hour MUST have explicit days (or "daily") AND an explicit start time; otherwise omit it.
 - Never borrow a time from a different item (e.g. do not give a day's drink special the happy-hour time). If a recurring deal is explicitly "all day", set "all_day": true and start_time/end_time null. Otherwise, a recurring item with no stated start time: start_time null.
 - Weekly recurrence only in days_of_week. For monthly items ("first Saturday", "last Tuesday of the month") output the NEXT occurrence on or after today as a one-off with date (double-check the weekday). Omit every-other-week/biweekly items unless a specific date is given.
@@ -419,7 +419,7 @@ const SCHEDULE_HINT =
 // ---------------------------------------------------------------------------
 export async function processSite(
   homepage: string,
-  opts: { venueName: string; prevHash?: string | null; forceLlm?: boolean; skipLlm?: boolean; maxSubpages?: number; now?: Date },
+  opts: { venueName: string; city?: string | null; prevHash?: string | null; forceLlm?: boolean; skipLlm?: boolean; maxSubpages?: number; now?: Date },
 ): Promise<SiteResult> {
   const today = chicagoDate(opts.now);
   const res: SiteResult = {
@@ -525,7 +525,7 @@ export async function processSite(
   if (opts.skipLlm && opts.prevHash) { res.status = "changed_deferred"; return res; }
 
   const dow = new Date(`${today}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
-  const user = `Venue: ${opts.venueName}\nToday is ${dow} ${today} (America/Chicago).\n\n${res.text}`;
+  const user = `Venue: ${opts.venueName}${opts.city ? ` (${opts.city}, Louisiana)` : ""}\nToday is ${dow} ${today} (America/Chicago).\n\n${res.text}`;
   res.llmCalled = true;
   try {
     const { data, usage } = await extractJsonWithUsage<unknown>(SYSTEM_PROMPT, user);

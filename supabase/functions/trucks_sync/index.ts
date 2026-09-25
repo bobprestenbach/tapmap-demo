@@ -12,7 +12,7 @@ import { inc, serveJob, type JobCtx } from "../_shared/job.ts";
 import { db } from "../_shared/db.ts";
 import { htmlToText, politeFetch, sha256, USER_AGENT } from "../_shared/http.ts";
 import { extractJson } from "../_shared/llm.ts";
-import { chicagoNow, chicagoToUtc, haversineM, NOLA_CENTER, nameSimilarity, normName, point } from "../_shared/geo.ts";
+import { chicagoNow, chicagoToUtc, haversineM, NOLA_CENTER, NOLA_CITY_ID, nameSimilarity, normName, point } from "../_shared/geo.ts";
 import {
   clampWindow, EXTRACT_SYSTEM, hhmm, looksLikeSchedule, parseJsonLdEvents, parseNolaToday, parseSff, type RawStop, slugify, toMinutes,
 } from "./parse.ts";
@@ -46,9 +46,14 @@ const GENERIC_NAME = /^(the\s+)?((food|local|rotating|various|guest)\s+)*(pop[\s
 // ---------------------------------------------------------------------------
 async function ensureVenues(ctx: JobCtx): Promise<Map<string, string>> {
   const { data: rows, error } = await db().from("venues")
-    .select("id,name,category,website,instagram,address,data_source")
+    .select("id,name,category,website,instagram,address,data_source,city_id")
     .in("category", ["food_truck", "popup"]);
   if (error) throw error;
+  // Venues now span many cities (other cities' OSM/Google imports can hold same-named trucks). When names
+  // collide, the last row wins below, so order: other cities < New Orleans/unplaced < truck_calendar < curated.
+  const rank = (r: { data_source: string; city_id: string | null }) =>
+    r.data_source === "curated" ? 3 : r.data_source === "truck_calendar" ? 2 : !r.city_id || r.city_id === NOLA_CITY_ID ? 1 : 0;
+  rows?.sort((x, y) => rank(x) - rank(y));
   const byNorm = new Map<string, (typeof rows)[number]>();
   for (const r of rows ?? []) byNorm.set(normName(r.name), r);
   const ids = new Map<string, string>(); // truck slug or norm name -> venue id

@@ -1,6 +1,6 @@
 // Polite fetching: identifying User-Agent, robots.txt, per-host rate limit, HTML -> text.
 export const USER_AGENT =
-  "TapMapBot/0.1 (+https://github.com/bobprestenbach/tapmap-demo; New Orleans happenings map)";
+  "TapMapBot/0.1 (+https://github.com/bobprestenbach/tapmap-demo; Louisiana happenings map)";
 
 type RobotsRule = { allow: boolean; re: RegExp; len: number };
 const robotsCache = new Map<string, RobotsRule[]>(); // origin -> rules applying to us

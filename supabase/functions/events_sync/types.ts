@@ -19,6 +19,8 @@ export type RawEvent = {
     address?: string | null;
     orgUrl?: string | null;         // page with venue details (WWOZ organization page)
     suspectCoords?: boolean;        // source coords look like a placeholder -> geocode the address
+    city?: string | null;           // source's own city/state for the venue (geocoding context)
+    state?: string | null;
   };
 };
 
@@ -44,7 +46,7 @@ export function decodeEntities(s: string): string {
     .replace(/\s+/g, " ").trim();
 }
 
-/** Rough Orleans Parish bounding box (East Bank + Algiers). Used as a sanity filter only. */
+/** Rough Orleans Parish bounding box (East Bank + Algiers). WWOZ (a NOLA station) sanity filter only. */
 export function inOrleansBox(lat: number, lng: number): boolean {
   return lat >= 29.86 && lat <= 30.2 && lng >= -90.14 && lng <= -89.62;
 }

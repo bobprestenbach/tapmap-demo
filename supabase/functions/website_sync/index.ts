@@ -1,5 +1,7 @@
 // website_sync: venue websites -> content hash -> (only if changed) LLM extraction -> happenings.
+// Queue: rpc website_queue (never-run first, hot cities only, prewarm-only when over budget).
 // Params: {"limit":N (default 30), "force":bool (ignore 20h skip + re-run LLM), "source_ids":[uuid],
+//          "city_id":text (only venues in this city; also refreshes the city's counts),
 //          "concurrency":N (default 5), "budget_ms":N (default 110000),
 //          "min_llm_age_hours":N (default 72; changed pages re-extracted at most this often)}
 import { serveJob, inc, JobCtx } from "../_shared/job.ts";
@@ -12,7 +14,8 @@ type SourceRow = {
   venue_id: string | null;
   content_hash: string | null;
   meta: Record<string, unknown> | null;
-  venues: { name: string } | null;
+  venue_name: string | null;
+  city_name?: string | null;
 };
 
 const SKIP_HOURS = 20;
@@ -45,10 +48,10 @@ function toRow(it: Item, venueId: string, sourceId: string, now: string) {
 async function handle(ctx: JobCtx, s: SourceRow, force: boolean, minLlmAgeH: number) {
   const sb = db();
   const now = new Date().toISOString();
-  const venueName = s.venues?.name ?? new URL(s.url.startsWith("http") ? s.url : `https://${s.url}`).host;
+  const venueName = s.venue_name ?? new URL(s.url.startsWith("http") ? s.url : `https://${s.url}`).host;
   const lastLlm = Date.parse(String(s.meta?.last_llm_at ?? "")) || 0;
   const skipLlm = !force && Date.now() - lastLlm < minLlmAgeH * 3600_000;
-  const r = await processSite(s.url, { venueName, prevHash: force ? null : s.content_hash, forceLlm: force, skipLlm });
+  const r = await processSite(s.url, { venueName, city: s.city_name ?? null, prevHash: force ? null : s.content_hash, forceLlm: force, skipLlm });
   if (r.status === "llm_error" && /AI gateway (402|429|5\d\d)/.test(r.error ?? "")) {
     llmDown = true;
     inc(ctx, "llm_unavailable");
@@ -132,16 +135,31 @@ serveJob("website_sync", async (ctx) => {
   const minLlmAgeH = Number(ctx.params.min_llm_age_hours ?? 72);
   const ids = Array.isArray(ctx.params.source_ids) ? (ctx.params.source_ids as string[]) : null;
 
-  let q = db().from("sources").select("id,url,venue_id,content_hash,meta,venues(name)").eq("kind", "website");
-  if (ids) q = q.in("id", ids);
-  else if (!force) {
-    const cutoff = new Date(Date.now() - SKIP_HOURS * 3600_000).toISOString();
-    q = q.or(`last_run_at.is.null,last_run_at.lt.${cutoff}`);
+  const cityId = ctx.params.city_id ? String(ctx.params.city_id) : null;
+
+  let queue: SourceRow[];
+  if (ids) {
+    const { data, error } = await db().from("sources").select("id,url,venue_id,content_hash,meta,venues(name)")
+      .eq("kind", "website").in("id", ids).order("last_run_at", { ascending: true, nullsFirst: true }).limit(limit);
+    if (error) throw new Error(`sources query: ${error.message}`);
+    queue = ((data ?? []) as unknown as (Omit<SourceRow, "venue_name"> & { venues: { name: string } | null })[])
+      .map(({ venues, ...r }) => ({ ...r, venue_name: venues?.name ?? null }));
+  } else {
+    // force: ignore the 20h skip (cutoff = now).
+    const cutoff = new Date(Date.now() - (force ? 0 : SKIP_HOURS * 3600_000)).toISOString();
+    const { data, error } = await db().rpc("website_queue", { p_limit: limit, p_cutoff: cutoff, p_city_id: cityId });
+    if (error) throw new Error(`website_queue: ${error.message}`);
+    queue = (data ?? []) as SourceRow[];
   }
-  const { data, error } = await q.order("last_run_at", { ascending: true, nullsFirst: true }).limit(limit);
-  if (error) throw new Error(`sources query: ${error.message}`);
-  const queue = [...((data ?? []) as unknown as SourceRow[])];
+  // Venue city names for the extraction prompt (one query).
+  const venueIds = [...new Set(queue.map((s) => s.venue_id).filter(Boolean))] as string[];
+  if (venueIds.length) {
+    const { data: vc } = await db().from("venues").select("id, cities(name)").in("id", venueIds);
+    const cityOf = new Map((vc ?? []).map((v) => [v.id as string, (v.cities as unknown as { name: string } | null)?.name ?? null]));
+    for (const s of queue) s.city_name = s.venue_id ? cityOf.get(s.venue_id) ?? null : null;
+  }
   ctx.counts.queued = queue.length;
+  if (cityId) ctx.counts.city_id = cityId;
 
   // Each site takes ~5-25s (polite per-host delays + one LLM call); stop picking new
   // sites when less than ~35s of budget remains.
@@ -163,6 +181,18 @@ serveJob("website_sync", async (ctx) => {
   await Promise.all(Array.from({ length: concurrency }, worker));
   ctx.counts.remaining_in_batch = queue.length;
   ctx.counts.elapsed_ms = Date.now() - t0;
+  const cost = Number(ctx.counts.llm_cost_usd ?? 0);
+  if (cost > 0) {
+    const { error } = await db().rpc("record_usage", {
+      p_service: "llm", p_sku: "haiku", p_units: Number(ctx.counts.llm_calls ?? 0), p_usd: cost,
+      p_city_id: cityId, p_job: "website_sync",
+    });
+    if (error) ctx.log("record_usage failed", error.message);
+  }
+  if (cityId) {
+    const { error } = await db().rpc("refresh_city_counts", { p_city_id: cityId });
+    if (error) ctx.log("refresh_city_counts failed", error.message);
+  }
   // Surface gateway outages (e.g. out of credit) as a failed run in sync_runs.
   if (llmDown) throw new Error(`AI gateway unavailable: ${ctx.counts.llm_unavailable_error ?? ""}`);
 });

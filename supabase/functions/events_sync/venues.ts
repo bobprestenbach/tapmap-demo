@@ -14,6 +14,8 @@ type CacheRow = {
   status: string; attempts?: number; meta?: Record<string, unknown>; updated_at?: string;
 };
 export type Resolution = { venueId: string | null; how: string };
+/** Which allowed city covers a point (null = none / not allowed). Used to accept Ticketmaster venues. */
+export type CityCheck = (lat: number, lng: number) => Promise<{ id: string; name: string } | null>;
 
 const CREATED_SOURCES = new Set(["ticketmaster", "wwoz"]);
 const RETRY_AFTER_MS = 14 * 24 * 3600 * 1000;
@@ -178,8 +180,9 @@ export class VenueIndex {
     if (error) console.error("event_venue_cache upsert", error.message);
   }
 
-  async createVenue(v: { name: string; category: string; lat: number; lng: number; address?: string | null; website?: string | null; data_source: string }): Promise<string | null> {
-    const neighborhood = this.nearestNeighborhood(v.lat, v.lng);
+  /** fallbackHood: used when no venue with a neighborhood is within 1.5 km (e.g. the city name). */
+  async createVenue(v: { name: string; category: string; lat: number; lng: number; address?: string | null; website?: string | null; data_source: string; fallbackHood?: string | null }): Promise<string | null> {
+    const neighborhood = this.nearestNeighborhood(v.lat, v.lng) ?? v.fallbackHood ?? null;
     const { data, error } = await db().from("venues").insert({
       name: v.name, category: v.category, location: point(v.lat, v.lng), neighborhood,
       address: v.address ?? null, website: v.website ?? null, data_source: v.data_source,
@@ -197,8 +200,12 @@ export class VenueIndex {
     return c?.venue_id && this.byId.has(c.venue_id) ? c.venue_id : null;
   }
 
-  /** Ticketmaster (and SeatGeek): venue lat/lng known. Match within 150 m, else create a venue at TM coordinates. */
-  async resolveTm(ev: RawEvent, dataSource = "ticketmaster"): Promise<Resolution> {
+  /**
+   * Ticketmaster (and SeatGeek): venue lat/lng known (or geocoded from the source's own street/city/state).
+   * The point must lie in an allowed city (cityAt), else how="outside" and the caller drops the event.
+   * Match within 150 m, else create a venue at TM coordinates.
+   */
+  async resolveTm(ev: RawEvent, dataSource: string, cityAt: CityCheck): Promise<Resolution> {
     const { key, name, address } = ev.venue;
     let { lat, lng } = ev.venue;
     const cached = this.cachedVenue(key);
@@ -207,7 +214,8 @@ export class VenueIndex {
       const c = this.cache.get(key);
       const geo = c?.lat != null && c.meta?.geocoded
         ? { lat: c.lat, lng: c.lng! }
-        : await geocodeStreet(address.split(",")[0].replace(/\s*#.*$|\s+(suite|ste)\b.*$/i, "").trim());
+        : await geocodeStreet(address.split(",")[0].replace(/\s*#.*$|\s+(suite|ste)\b.*$/i, "").trim(),
+          { city: ev.venue.city ?? undefined, state: ev.venue.state ?? undefined, center: lat != null ? { lat, lng: lng! } : undefined });
       if (geo) { lat = geo.lat; lng = geo.lng; ev.venue.lat = lat; ev.venue.lng = lng; }
       else if (ev.venue.suspectCoords) {
         ev.venue.lat = ev.venue.lng = null; // don't place the event at a placeholder point
@@ -215,6 +223,8 @@ export class VenueIndex {
       }
     }
     if (lat == null || lng == null) return { venueId: null, how: "no_coords" };
+    const city = await cityAt(lat, lng);
+    if (!city) return { venueId: null, how: "outside" };
     const m = this.matchNear(name, lat, lng);
     if (m) {
       await this.saveCache({ key, name, address, lat, lng, venue_id: m.id, status: "resolved", meta: { how: "match", geocoded: !!ev.venue.suspectCoords } });
@@ -223,7 +233,7 @@ export class VenueIndex {
     const id = await this.createVenue({
       name, lat, lng, address, data_source: dataSource,
       // venues.category has no theater/arena value; music_venue is the closest fit for any ticketed venue.
-      category: "music_venue",
+      category: "music_venue", fallbackHood: city.name,
     });
     await this.saveCache({ key, name, address, lat, lng, venue_id: id, status: id ? "resolved" : "pending", meta: { how: "created", geocoded: !!ev.venue.suspectCoords } });
     return { venueId: id, how: id ? "created" : "failed" };
@@ -300,7 +310,7 @@ export class VenueIndex {
     }
     const near = this.matchNear(name, geo.lat, geo.lng, 0.7, 150);
     const id = near?.id ?? await this.createVenue({
-      name, category: "music_venue", lat: geo.lat, lng: geo.lng, address, website, data_source: "wwoz",
+      name, category: "music_venue", lat: geo.lat, lng: geo.lng, address, website, data_source: "wwoz", fallbackHood: "New Orleans",
     });
     await this.saveCache({
       key, name, address, website, lat: geo.lat, lng: geo.lng, venue_id: id,

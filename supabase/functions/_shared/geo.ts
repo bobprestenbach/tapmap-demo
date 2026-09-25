@@ -1,5 +1,6 @@
 // Geo + fuzzy matching helpers.
 export const NOLA_CENTER = { lat: 29.9511, lng: -90.0715 };
+export const NOLA_CITY_ID = "2255000"; // Census GEOID of New Orleans (public.cities.id)
 export const TZ = "America/Chicago";
 
 export function point(lat: number, lng: number): string {
