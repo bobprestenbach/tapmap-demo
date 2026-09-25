@@ -2,9 +2,10 @@
 // Venues are loaded into memory (a few hundred rows) and matched with fuzzy name + distance.
 // Resolutions are cached in public.event_venue_cache keyed by the source's venue key.
 import { db } from "../_shared/db.ts";
-import { haversineM, nameSimilarity, normName, point } from "../_shared/geo.ts";
-import { politeFetch, USER_AGENT } from "../_shared/http.ts";
-import { decodeEntities, Deadline, inOrleansBox, RawEvent, sleep } from "./types.ts";
+import { haversineM, normName, point } from "../_shared/geo.ts";
+import { politeFetch } from "../_shared/http.ts";
+import { geocodeStreet, searchPlace } from "./geocode.ts";
+import { decodeEntities, Deadline, inOrleansBox, RawEvent } from "./types.ts";
 
 type V = { id: string; name: string; category: string; data_source: string; lat: number; lng: number; address: string | null };
 type CacheRow = {
@@ -17,41 +18,49 @@ export type Resolution = { venueId: string | null; how: string };
 const CREATED_SOURCES = new Set(["ticketmaster", "wwoz"]);
 const RETRY_AFTER_MS = 14 * 24 * 3600 * 1000;
 
-/** nameSimilarity with a guard: substring containment of very short names is not a strong match. */
-export function sim(a: string, b: string): number {
-  const s = nameSimilarity(a, b);
-  if (s === 0.9) {
-    const x = normName(a), y = normName(b);
-    if (x !== y && Math.min(x.length, y.length) < 5) return 0.7;
-  }
-  return s;
+const GENERIC = new Set([
+  "brewing", "brewery", "bayou", "cafe", "jazz", "music", "grill", "kitchen", "pub", "tavern", "house", "hall",
+  "room", "saloon", "hotel", "court", "courtyard", "stage", "market", "park", "theater", "theatre", "street",
+  "quarter", "french", "orleans", "other", "place", "spot", "den", "co",
+]);
+
+function dice(x: string, y: string): number {
+  if (x.length < 2 || y.length < 2) return 0;
+  const bg = (s: string) => { const m = new Map<string, number>(); for (let i = 0; i < s.length - 1; i++) { const k = s.slice(i, i + 2); m.set(k, (m.get(k) ?? 0) + 1); } return m; };
+  const A = bg(x), B = bg(y); let inter = 0;
+  for (const [k, n] of A) inter += Math.min(n, B.get(k) ?? 0);
+  return (2 * inter) / (x.length - 1 + y.length - 1);
 }
 
-let lastNominatim = 0;
-async function nominatim(params: Record<string, string>): Promise<
-  { lat: number; lng: number; county: string; display: string } | null
-> {
-  const wait = lastNominatim + 1100 - Date.now();
-  if (wait > 0) await sleep(wait);
-  lastNominatim = Date.now();
-  const u = new URL("https://nominatim.openstreetmap.org/search");
-  for (const [k, v] of Object.entries({ ...params, format: "jsonv2", addressdetails: "1", limit: "1", countrycodes: "us" })) {
-    u.searchParams.set(k, v);
+/**
+ * Stricter variant of _shared nameSimilarity. Containment ("Blue Nile" in "Blue Nile - Balcony Room") only
+ * scores 0.9 when it falls on word boundaries and the shorter name is not a lone generic word; a single-word
+ * short name must also be the first word of the longer one ("Maison" ~ "Maison Bourbon", but not
+ * "Bayou" ~ "Pirogue's Whiskey Bayou" or "Saint" ~ "Herbsaint"). Otherwise bigram Dice.
+ */
+export function sim(a: string, b: string): number {
+  // "Bayou Bar at the Pontchartrain", "Blue Nile - Balcony Room", "Bacchanal (OUTDOORS)" -> also try the head.
+  const head = (s: string) => s.split(/\s+(?:at|@)\s+|\s+-\s+|\s*\(|,\s*/i)[0].trim();
+  let best = simOne(a, b);
+  for (const [p, q] of [[head(a), b], [a, head(b)], [head(a), head(b)]]) {
+    if (p && q && (p !== a || q !== b)) best = Math.max(best, simOne(p, q));
   }
-  try {
-    const r = await fetch(u, { headers: { "user-agent": USER_AGENT, accept: "application/json" }, signal: AbortSignal.timeout(10000) });
-    if (!r.ok) return null;
-    const arr = await r.json();
-    const hit = arr?.[0];
-    if (!hit) return null;
-    return {
-      lat: +hit.lat, lng: +hit.lon,
-      county: hit.address?.county ?? hit.address?.city_district ?? "",
-      display: hit.display_name ?? "",
-    };
-  } catch {
-    return null;
+  return best;
+}
+
+function simOne(a: string, b: string): number {
+  const x = normName(a), y = normName(b);
+  if (!x || !y) return 0;
+  if (x === y) return 1;
+  const [short, long] = x.length <= y.length ? [x, y] : [y, x];
+  if (long.includes(short)) {
+    const toks = short.split(" ").filter((t) => t.length > 1);
+    const longToks = long.split(" ").filter((t) => t.length > 1);
+    const boundary = ` ${long} `.includes(` ${short} `);
+    const meaningful = toks.filter((t) => !GENERIC.has(t));
+    if (boundary && meaningful.length > 0 && (toks.length > 1 || longToks[0] === toks[0])) return 0.9;
   }
+  return dice(x, y);
 }
 
 export class VenueIndex {
@@ -127,23 +136,35 @@ export class VenueIndex {
     return c?.venue_id && this.byId.has(c.venue_id) ? c.venue_id : null;
   }
 
-  /** Ticketmaster: venue lat/lng known. Match within 150 m, else create a venue at TM coordinates. */
-  async resolveTm(ev: RawEvent): Promise<Resolution> {
-    const { key, name, lat, lng, address } = ev.venue;
+  /** Ticketmaster (and SeatGeek): venue lat/lng known. Match within 150 m, else create a venue at TM coordinates. */
+  async resolveTm(ev: RawEvent, dataSource = "ticketmaster"): Promise<Resolution> {
+    const { key, name, address } = ev.venue;
+    let { lat, lng } = ev.venue;
     const cached = this.cachedVenue(key);
     if (cached) return { venueId: cached, how: "cache" };
+    if ((ev.venue.suspectCoords || lat == null) && address) {
+      const c = this.cache.get(key);
+      const geo = c?.lat != null && c.meta?.geocoded
+        ? { lat: c.lat, lng: c.lng! }
+        : await geocodeStreet(address.split(",")[0].replace(/\s*#.*$|\s+(suite|ste)\b.*$/i, "").trim());
+      if (geo) { lat = geo.lat; lng = geo.lng; ev.venue.lat = lat; ev.venue.lng = lng; }
+      else if (ev.venue.suspectCoords) {
+        ev.venue.lat = ev.venue.lng = null; // don't place the event at a placeholder point
+        return { venueId: null, how: "bad_coords" };
+      }
+    }
     if (lat == null || lng == null) return { venueId: null, how: "no_coords" };
     const m = this.matchNear(name, lat, lng, 0.75, 150);
     if (m) {
-      await this.saveCache({ key, name, address, lat, lng, venue_id: m.id, status: "resolved", meta: { how: "match" } });
+      await this.saveCache({ key, name, address, lat, lng, venue_id: m.id, status: "resolved", meta: { how: "match", geocoded: !!ev.venue.suspectCoords } });
       return { venueId: m.id, how: "matched" };
     }
     const id = await this.createVenue({
-      name, lat, lng, address, data_source: "ticketmaster",
+      name, lat, lng, address, data_source: dataSource,
       // venues.category has no theater/arena value; music_venue is the closest fit for any ticketed venue.
       category: "music_venue",
     });
-    await this.saveCache({ key, name, address, lat, lng, venue_id: id, status: id ? "resolved" : "pending", meta: { how: "created" } });
+    await this.saveCache({ key, name, address, lat, lng, venue_id: id, status: id ? "resolved" : "pending", meta: { how: "created", geocoded: !!ev.venue.suspectCoords } });
     return { venueId: id, how: id ? "created" : "failed" };
   }
 
@@ -168,13 +189,17 @@ export class VenueIndex {
       await this.saveCache({ key, name, status: "not_found" });
       return { venueId: null, how: "not_found" };
     }
-    // Needs network: WWOZ page (10 s crawl delay) + Nominatim.
-    if (dl.left() < 25000) return { venueId: null, how: "deferred" };
+    // Needs network. Cheap first: Nominatim name search (1 req/s), accepted only for a same-named POI
+    // inside Orleans Parish. Else scrape the WWOZ organization page (10 s crawl delay) for the address.
+    if (dl.left() < 15000) return { venueId: null, how: "deferred" };
     counts.wwoz_venue_lookups = ((counts.wwoz_venue_lookups as number) ?? 0) + 1;
-    await this.saveCache({ key, name, status: "pending", attempts: (c?.attempts ?? 0) + 1 });
-
     let address: string | null = null, website: string | null = null;
-    if (orgUrl) {
+    let geo = await searchPlace(name);
+    if (geo && !(sim(name, geo.name) >= 0.75 && /orleans/i.test(geo.county + " " + geo.display))) geo = null;
+    if (geo) address = geo.address;
+
+    if (!geo && orgUrl && dl.left() > 25000) {
+      await this.saveCache({ key, name, status: "pending", attempts: (c?.attempts ?? 0) + 1 });
       try {
         const r = await politeFetch(orgUrl, { minDelayMs: 10000 });
         if (r?.ok) {
@@ -192,14 +217,12 @@ export class VenueIndex {
       } catch (e) {
         console.error("wwoz org fetch", orgUrl, e);
       }
+      if (address) {
+        geo = await geocodeStreet(address.split(",")[0]);
+      }
+    } else if (!geo) {
+      return { venueId: null, how: "deferred" };
     }
-
-    let geo = null;
-    if (address) {
-      const street = address.split(",")[0];
-      geo = await nominatim({ street, city: "New Orleans", state: "Louisiana" });
-    }
-    if (!geo) geo = await nominatim({ q: `${name}, New Orleans, Louisiana` });
     if (!geo) {
       await this.saveCache({ key, name, address, website, status: address ? "pending" : "not_found" });
       return { venueId: null, how: "geocode_failed" };

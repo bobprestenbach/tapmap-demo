@@ -18,6 +18,7 @@ export type RawEvent = {
     lng?: number | null;
     address?: string | null;
     orgUrl?: string | null;         // page with venue details (WWOZ organization page)
+    suspectCoords?: boolean;        // source coords look like a placeholder -> geocode the address
   };
 };
 

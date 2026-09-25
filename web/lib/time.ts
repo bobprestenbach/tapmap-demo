@@ -83,7 +83,7 @@ export function timeLabel(
     return `${LIVE_PREFIX[h.kind] ?? "Until"} ${clockWithDay(end, now, "end")}`;
   }
   const when = clockWithDay(start, now, "start");
-  if (h.kind === "happy_hour") return when.startsWith("tomorrow") || /^[A-Z]/.test(when) ? `Happy hour ${when}` : `Happy hour at ${when}`;
+  if (h.kind === "happy_hour") return when.includes(" ") ? `Happy hour ${when}` : `Happy hour at ${when}`;
   return `Starts ${when}`;
 }
 

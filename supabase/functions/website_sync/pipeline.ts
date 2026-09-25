@@ -2,7 +2,7 @@
 // convert to text, parse JSON-LD events, run LLM extraction, validate/normalize.
 // Used by the website_sync edge function and by scripts/eval/website_eval.ts.
 import { htmlToText, politeFetch, sha256 } from "../_shared/http.ts";
-import { chicagoNow, chicagoToUtc } from "../_shared/geo.ts";
+import { chicagoNow, chicagoToUtc, nameSimilarity } from "../_shared/geo.ts";
 import { extractJsonWithUsage, Usage } from "./llm.ts";
 
 export const KINDS = ["happy_hour", "special", "live_music", "event", "popup"] as const;
@@ -39,6 +39,7 @@ export type SiteResult = {
   dropped: { reason: string; raw: unknown }[];
   llmCalled: boolean;
   usage: Usage | null;
+  failedPages: string[];
   error?: string;
 };
 
@@ -97,6 +98,12 @@ export function discoverLinks(html: string, pageUrl: string, max = 3): string[] 
     if (!prev || prev.score < score) scored.set(k, { url: u.href.replace(/#.*$/, ""), score });
   }
   return [...scored.values()].sort((a, b) => b.score - a.score).slice(0, max).map((x) => x.url);
+}
+
+function isSoft404(url: string, html: string): boolean {
+  if (/\/404(\.\w+)?\/?$|not-found/i.test(new URL(url).pathname)) return true;
+  const title = html.match(/<title[^>]*>([\s\S]*?)<\/title>/i)?.[1] ?? "";
+  return /\b404\b|not found|page (can.t|cannot|could not) be found|nothing found/i.test(title);
 }
 
 const GUESS_PATHS = ["/happy-hour", "/specials", "/events"];
@@ -158,6 +165,10 @@ export function parseJsonLdEvents(html: string, pageUrl: string, today: string):
       if (isNaN(+start)) continue;
       // If no explicit offset, treat as Chicago wall clock.
       const hasTz = /(Z|[+-]\d{2}:?\d{2})$/.test(sd);
+      // Chain sites list other cities' events: require a Central-time offset and a NOLA-ish address.
+      if (hasTz && !/-0[56]:?00$/.test(sd)) continue;
+      const loc = JSON.stringify(n.location ?? "");
+      if (/addressLocality|addressRegion/.test(loc) && !/new orleans|nola|metairie|\bLA\b|louisiana/i.test(loc)) continue;
       const startsAt = hasTz ? start.toISOString() : chicagoToUtc(sd.slice(0, 10), sd.slice(11, 16));
       const localDate = hasTz ? chicagoDate(new Date(startsAt)) : sd.slice(0, 10);
       if (localDate < today || localDate > horizon) continue;
@@ -264,7 +275,7 @@ Rules:
 - Times are 24h "HH:MM" local New Orleans time. "4-7pm" = 16:00-19:00. "till close"/"late"/unstated end = end_time null. "10pm-2am" = start 22:00 end 02:00.
 - A happy hour MUST have explicit days (or "daily") AND an explicit start time; otherwise omit it.
 - Never borrow a time from a different item (e.g. do not give a day's drink special the happy-hour time). If a recurring deal is explicitly "all day", set "all_day": true and start_time/end_time null. Otherwise, a recurring item with no stated start time: start_time null.
-- Weekly recurrence only. For monthly or every-other-week items ("first Saturday", "last Friday of the month", "biweekly"), include them ONLY if the text gives a specific upcoming date (then use date); otherwise omit.
+- Weekly recurrence only in days_of_week. For monthly items ("first Saturday", "last Tuesday of the month") output the NEXT occurrence on or after today as a one-off with date (double-check the weekday). Omit every-other-week/biweekly items unless a specific date is given.
 - One item per distinct schedule. If a happy hour has different times on different days, output one item per time window.
 - title: short and specific (e.g. "Happy Hour", "$1 Oyster Tuesday", "Trivia Night", "Kermit Ruffins & the BBQ Swingers"). Do not include the venue name.
 - description: one short sentence of what's offered (deal details), or null. price_text: prices/discounts as written (e.g. "$5 wells, half-off apps"), or null.
@@ -325,7 +336,9 @@ export async function normalizeItems(
     if (date) {
       if (date < today) { drop("past_date"); continue; }
       if (date > horizon) { drop("too_far"); continue; }
+      if (!start && o.all_day === true && kind === "special" && ALL_DAY.test(String(o.evidence ?? ""))) { start = "00:00"; end = "23:59"; }
       if (!start) { drop("dated_no_time"); continue; }
+      if (!monthlyDateOk(`${o.evidence ?? ""} ${o.description ?? ""}`, date)) { drop("monthly_date_mismatch"); continue; }
       startsAt = chicagoToUtc(date, start);
       if (end) endsAt = chicagoToUtc(end <= start ? addDays(date, 1) : date, end);
       days = null;
@@ -333,7 +346,8 @@ export async function normalizeItems(
       if (!days) { drop("no_days"); continue; }
       const blob = `${o.evidence ?? ""} ${o.description ?? ""} ${o.title ?? ""}`;
       if (MONTHLY.test(blob)) { drop("monthly_recurrence"); continue; }
-      if (!start && o.all_day === true && kind !== "happy_hour") {
+      if (DATED.test(String(o.evidence ?? "")) && !WEEKLY.test(blob)) { drop("recurring_from_single_date"); continue; }
+      if (!start && o.all_day === true && kind === "special" && ALL_DAY.test(String(o.evidence ?? ""))) {
         // Explicit "all day" deal: cover the whole day; UI shows it as all-day.
         start = "00:00"; end = "23:59";
         o.confidence = Math.min(Number(o.confidence ?? 0.7), 0.75);
@@ -349,6 +363,8 @@ export async function normalizeItems(
     conf = Math.max(0, Math.min(1, conf));
     const evidence = str(o.evidence, 300);
     const ev = evidence ? evidenceMatch(evidence, text) : "missing";
+    // "Every day" is a common silent inference (e.g. from opening hours); trust it less unless stated.
+    if (days?.length === 7 && !EVERY_DAY.test(`${evidence ?? ""} ${o.description ?? ""}`)) conf *= 0.75;
     if (ev === "fuzzy") conf *= 0.85;
     if (ev === "missing") conf *= 0.5;
     conf = Math.round(conf * 100) / 100;
@@ -365,8 +381,29 @@ export async function normalizeItems(
   return { items, dropped };
 }
 
+const EVERY_DAY = /daily|every\s*day|everyday|7 days|seven days|nightly|every night|(sun|mon)\w*\s*(-|–|—|to|through|thru)\s*(sat|sun)\w*/i;
+const ALL_DAY = /all[\s-]*day|all night|open to close/i;
+const DATED = /\b(jan(uary)?|feb(ruary)?|mar(ch)?|apr(il)?|may|june?|july?|aug(ust)?|sep(t(ember)?)?|oct(ober)?|nov(ember)?|dec(ember)?)\.?\s+\d{1,2}(st|nd|rd|th)?\b/i;
+const WEEKLY = /\bevery\b|weekly|nightly|daily|each\b|(sun|mon|tues|wednes|thurs|fri|satur)days\b|\b(mon|tue|wed|thu|fri|sat|sun)\w*\s*[-–—]\s*(mon|tue|wed|thu|fri|sat|sun)/i;
+
 const MONTHLY =
   /\b(monthly|every other|bi-?weekly|(first|second|third|fourth|last|1st|2nd|3rd|4th)\s+(sun|mon|tue|wed|thu|fri|sat)\w*)/i;
+
+const ORD: Record<string, number> = { first: 1, "1st": 1, second: 2, "2nd": 2, third: 3, "3rd": 3, fourth: 4, "4th": 4, last: -1 };
+/** If the text says e.g. "first Saturday" / "last Tuesday", check the model's computed date agrees. */
+export function monthlyDateOk(text: string, date: string): boolean {
+  const m = text.match(/\b(first|second|third|fourth|last|1st|2nd|3rd|4th)\s+(sun|mon|tue|wed|thu|fri|sat)\w*/i);
+  if (!m) return true;
+  const d = new Date(`${date}T12:00:00Z`);
+  if (DAY_NAMES[d.getUTCDay()] !== m[2].toLowerCase().slice(0, 3)) return false;
+  const n = ORD[m[1].toLowerCase()];
+  const dom = d.getUTCDate();
+  if (n === -1) {
+    const dim = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth() + 1, 0)).getUTCDate();
+    return dom + 7 > dim;
+  }
+  return Math.ceil(dom / 7) === n;
+}
 
 const SCHEDULE_HINT =
   /\b\d{1,2}(:\d{2})?\s*(am|pm|a\.m\.|p\.m\.)|\bnoon\b|\bmidnight\b|happy\s*hour|\b\d{1,2}:\d{2}\b|\b(mon|tues|wednes|thurs|fri|satur|sun)days?\b/i;
@@ -381,7 +418,7 @@ export async function processSite(
   const today = chicagoDate(opts.now);
   const res: SiteResult = {
     status: "ok", pages: [], pagesFetched: 0, robotsBlocked: 0, text: "", hash: null, items: [], dropped: [],
-    llmCalled: false, usage: null,
+    llmCalled: false, usage: null, failedPages: [],
   };
   let url = homepage.trim();
   if (!/^https?:\/\//i.test(url)) url = `https://${url}`;
@@ -419,9 +456,25 @@ export async function processSite(
     const f = await fetchHtml(u);
     if ("blocked" in f) { res.robotsBlocked++; continue; }
     res.pagesFetched++;
-    if ("error" in f) { if (!guessed) res.pages.push({ url: u, status: f.status, chars: 0 }); continue; }
-    if (guessed && normUrl(new URL(f.url)) === normUrl(new URL(home.url))) continue; // redirected home
+    if ("error" in f) { if (!guessed) res.failedPages.push(`${u} (${f.error})`); continue; }
+    if (htmls.some((h) => normUrl(new URL(h.url)) === normUrl(new URL(f.url)))) continue; // redirect to a page we have
+    if (isSoft404(f.url, f.html)) continue;
     htmls.push({ url: f.url, html: f.html, guessed });
+  }
+
+  // Depth 2: a subpage (e.g. /menus) often links to the actual happy-hour page.
+  const allHtml = htmls.map((h) => h.html).join("\n");
+  if (!/happy\s*hour[^\n]{0,80}\d/i.test(htmlToText(allHtml))) {
+    const fetched = new Set(htmls.map((h) => normUrl(new URL(h.url))));
+    for (const p of htmls.slice(1)) {
+      const hh = discoverLinks(p.html, p.url, 5).find((l) => /happy|special/i.test(l) && !fetched.has(normUrl(new URL(l))));
+      if (!hh) continue;
+      const f = await fetchHtml(hh);
+      if ("blocked" in f) { res.robotsBlocked++; break; }
+      res.pagesFetched++;
+      if (!("error" in f) && !isSoft404(f.url, f.html)) htmls.push({ url: f.url, html: f.html });
+      break;
+    }
   }
 
   // Text assembly with cross-page line dedupe (drops repeated nav/footer).
@@ -453,7 +506,10 @@ export async function processSite(
   res.hash = await sha256(res.text + "\n#LD\n" + ldSig);
 
   // JSON-LD events never need the LLM.
-  for (const e of ld) res.items.push({ ...e, key: await itemKey({ ...e, title: `ld:${e.title}` }) });
+  for (const e of ld) {
+    const key = await itemKey({ ...e, title: `ld:${e.title}` });
+    if (!res.items.some((x) => x.key === key)) res.items.push({ ...e, key });
+  }
 
   if (!opts.forceLlm && opts.prevHash && opts.prevHash === res.hash) { res.status = "unchanged"; return res; }
   const bodyChars = res.text.replace(/^### PAGE.*$/gm, "").trim().length;
@@ -468,6 +524,9 @@ export async function processSite(
     res.usage = usage;
     const { items, dropped } = await normalizeItems(data, res.text, pageUrls, today);
     res.dropped = dropped;
+    // Prefer the LLM's version of an event also present in JSON-LD (better kind/description).
+    const sameEvent = (a: Item, b: Item) => a.starts_at === b.starts_at && nameSimilarity(a.title, b.title) >= 0.6;
+    res.items = res.items.filter((ldItem) => !items.some((it) => it.starts_at && sameEvent(it, ldItem)));
     const have = new Set(res.items.map((i) => i.key));
     for (const it of items) if (!have.has(it.key)) { have.add(it.key); res.items.push(it); }
   } catch (e) {

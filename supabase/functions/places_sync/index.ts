@@ -1,13 +1,14 @@
 // places_sync: import NOLA venues (bars, restaurants, music venues) into public.venues.
 //
-// Providers (param "provider", default "osm"):
+// Providers (param "provider"; default "google" when ENABLE_GOOGLE_PLACES=true, else "osm"):
 //   osm      OpenStreetMap via Overpass (enabled). Upsert on osm_id, name+distance merge.
-//   google   Google Places API (New) Text Search — only when ENABLE_GOOGLE_PLACES=true.
+//   google   Google Places API (New) Text Search — only when ENABLE_GOOGLE_PLACES=true. Per-hood 6-day
+//            cache (sources kind=google_places); {"force":true} bypasses. Merges into OSM rows by name+<150 m.
 //   curated  Upsert venues passed in the body as {"venues":[...]} (see data/venues/curated.json,
 //            scripts/venues/sync_curated.sh). Matches existing rows by name + <150 m and enriches.
 // Params: {"elements":[<pre-fetched Overpass elements>], "neighborhoods":["French Quarter",...], "includeNoWebsite":false, "dryRun":false, "maxPages":1}
 // Also upserts a sources row (kind='website', cadence='daily') for every venue with a website.
-import { flag } from "../_shared/db.ts";
+import { db, flag } from "../_shared/db.ts";
 import { inc, serveJob } from "../_shared/job.ts";
 import { dedupeBatch, neighborhoodFor, normalizeInstagram, normalizeUrl, selectHoods, upsertVenues, VenueIn } from "./common.ts";
 import { fetchGoogleVenues } from "./google.ts";
@@ -22,7 +23,7 @@ type CuratedIn = {
 
 serveJob("places_sync", async (ctx) => {
   const deadline = Date.now() + BUDGET_MS;
-  const provider = String(ctx.params.provider ?? "osm");
+  const provider = String(ctx.params.provider ?? (flag("ENABLE_GOOGLE_PLACES") ? "google" : "osm"));
   const hoods = selectHoods(ctx.params.neighborhoods);
   if (hoods.length === 0) throw new Error("no matching neighborhoods");
   ctx.counts.provider = provider;
@@ -38,9 +39,32 @@ serveJob("places_sync", async (ctx) => {
     venues = v;
   } else if (provider === "google") {
     if (!flag("ENABLE_GOOGLE_PLACES")) { ctx.counts.skipped = "ENABLE_GOOGLE_PLACES is off"; return; }
-    const { venues: v, stats } = await fetchGoogleVenues(hoods, { maxPages: Number(ctx.params.maxPages ?? 1), deadline }, ctx.log);
-    Object.assign(ctx.counts, stats);
-    venues = v;
+    // Hood-by-hood so progress survives the time budget; each hood is cached for 6 days
+    // (sources kind='google_places') so repeated invocations never re-buy the same results.
+    const force = !!ctx.params.force;
+    const { data: recent } = await db().from("sources").select("url")
+      .eq("kind", "google_places").gt("last_run_at", new Date(Date.now() - 6 * 864e5).toISOString());
+    const fresh = new Set((recent ?? []).map((r) => r.url));
+    for (const h of hoods) {
+      const key = `gplaces:${h.name}`;
+      if (!force && fresh.has(key)) { inc(ctx, "hoods_cached"); continue; }
+      if (Date.now() > deadline - 25_000) { inc(ctx, "hoods_deferred"); continue; }
+      const { venues: v, stats } = await fetchGoogleVenues([h], { maxPages: Number(ctx.params.maxPages ?? 2), deadline }, ctx.log);
+      for (const [k, n] of Object.entries(stats)) inc(ctx, k, n);
+      const d = dedupeBatch(v);
+      inc(ctx, "candidates", d.length);
+      inc(ctx, "with_website", d.filter((x) => x.website).length);
+      await upsertVenues(ctx, d, deadline);
+      if (!ctx.params.dryRun) {
+        await db().from("sources").upsert({
+          kind: "google_places", url: key, cadence: "weekly", last_run_at: new Date().toISOString(),
+          last_status: "ok", meta: { requests: stats.requests, results: stats.raw },
+        }, { onConflict: "kind,url" });
+      }
+      inc(ctx, "hoods_done");
+    }
+    ctx.counts.est_cost_usd = Math.round((Number(ctx.counts.requests ?? 0) * 0.035) * 100) / 100;
+    return;
   } else if (provider === "curated") {
     const list = (ctx.params.venues ?? []) as CuratedIn[];
     if (!Array.isArray(list) || list.length === 0) throw new Error('curated provider needs {"venues":[...]}');

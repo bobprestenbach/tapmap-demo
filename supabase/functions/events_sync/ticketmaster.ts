@@ -81,6 +81,17 @@ export async function fetchTicketmaster(
     const totalPages = data?.page?.totalPages ?? 1;
     if (page + 1 >= totalPages) break;
   }
+  // Ticketmaster uses placeholder coordinates for some venues (several different venues sharing one
+  // point, often with zero-padded decimals). Flag those so the venue resolver geocodes the address.
+  const namesAt = new Map<string, Set<string>>();
+  for (const e of events) {
+    const k = `${e.venue.lat},${e.venue.lng}`;
+    namesAt.set(k, (namesAt.get(k) ?? new Set()).add(e.venue.key));
+  }
+  for (const e of events) {
+    if (e.venue.lat == null) continue;
+    if ((namesAt.get(`${e.venue.lat},${e.venue.lng}`)?.size ?? 0) > 1) e.venue.suspectCoords = true;
+  }
   opts.log("ticketmaster", stats);
   return { events, stats };
 }

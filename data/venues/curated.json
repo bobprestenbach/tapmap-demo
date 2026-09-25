@@ -1,0 +1,524 @@
+{
+ "_note": "Curated well-known NOLA venues. Coordinates from OpenStreetMap (osm:<id>), Google Places, or Nominatim address geocodes; websites from OSM/Google or verified by fetching the site. Load with scripts/venues/sync_curated.sh.",
+ "venues": [
+  {
+   "name": "Tipitina's",
+   "category": "music_venue",
+   "lat": 29.91739,
+   "lng": -90.10082,
+   "address": "501 Napoleon Ave, New Orleans, LA 70115",
+   "website": "https://tipitinas.com/",
+   "source": "osm:way/327857882"
+  },
+  {
+   "name": "Tipitina's French Quarter",
+   "category": "music_venue",
+   "lat": 29.95299,
+   "lng": -90.06538,
+   "address": "233 Decatur St, New Orleans, LA 70130",
+   "website": "https://tipitinas.com/",
+   "source": "osm:node/2188124096"
+  },
+  {
+   "name": "Preservation Hall",
+   "category": "music_venue",
+   "lat": 29.9583,
+   "lng": -90.06543,
+   "address": "726 St Peter St, New Orleans, LA 70116",
+   "website": "https://www.preservationhall.com/",
+   "source": "osm:way/329365549"
+  },
+  {
+   "name": "d.b.a.",
+   "category": "music_venue",
+   "lat": 29.96394,
+   "lng": -90.05789,
+   "address": "618 Frenchmen St, New Orleans, LA 70116",
+   "website": "https://www.dbaneworleans.com/",
+   "source": "osm:node/1236420887; site verified"
+  },
+  {
+   "name": "The Spotted Cat Music Club",
+   "category": "music_venue",
+   "lat": 29.96407,
+   "lng": -90.05763,
+   "address": "623 Frenchmen St, New Orleans, LA 70116",
+   "website": "https://www.spottedcatmusicclub.com/",
+   "source": "osm:way/370789108"
+  },
+  {
+   "name": "Snug Harbor",
+   "category": "music_venue",
+   "lat": 29.96413,
+   "lng": -90.05792,
+   "address": "626 Frenchmen St, New Orleans, LA 70116",
+   "website": "https://snugjazz.com/",
+   "source": "osm:node/417259129"
+  },
+  {
+   "name": "Blue Nile",
+   "category": "music_venue",
+   "lat": 29.96317,
+   "lng": -90.05789,
+   "address": "532 Frenchmen St, New Orleans, LA 70116",
+   "website": "https://www.bluenilelive.com/",
+   "source": "osm:way/966115907"
+  },
+  {
+   "name": "Maple Leaf Bar",
+   "category": "music_venue",
+   "lat": 29.94895,
+   "lng": -90.13208,
+   "address": "8316 Oak St, New Orleans, LA 70118",
+   "website": "http://www.mapleleafbar.com/",
+   "source": "osm:way/327271015"
+  },
+  {
+   "name": "Chickie Wah Wah",
+   "category": "music_venue",
+   "lat": 29.96675,
+   "lng": -90.08959,
+   "address": "2828 Canal St, New Orleans, LA 70119",
+   "website": "https://chickiewahwah.com/",
+   "source": "osm:node/3359754231"
+  },
+  {
+   "name": "Hi-Ho Lounge",
+   "category": "music_venue",
+   "lat": 29.96899,
+   "lng": -90.05543,
+   "address": "2239 St Claude Ave, New Orleans, LA 70117",
+   "website": "https://www.hiholoungenola.com/",
+   "source": "osm:way/350479433"
+  },
+  {
+   "name": "Three Muses",
+   "category": "music_venue",
+   "lat": 29.96329,
+   "lng": -90.05784,
+   "address": "536 Frenchmen St, New Orleans, LA 70116",
+   "website": "http://www.thethreemuses.com/",
+   "source": "osm:node/1774933420"
+  },
+  {
+   "name": "Bacchanal",
+   "category": "music_venue",
+   "lat": 29.95979,
+   "lng": -90.03324,
+   "address": "600 Poland Ave, New Orleans, LA 70117",
+   "website": "https://www.bacchanalwine.com/",
+   "source": "osm:way/374132868"
+  },
+  {
+   "name": "Cure",
+   "category": "bar",
+   "lat": 29.93502,
+   "lng": -90.10748,
+   "address": "4905 Freret St, New Orleans, LA 70115",
+   "website": "https://www.curenola.com/",
+   "source": "osm:node/1759453509; site verified"
+  },
+  {
+   "name": "Cane and Table",
+   "category": "bar",
+   "lat": 29.96022,
+   "lng": -90.05982,
+   "address": "1113 Decatur St, New Orleans, LA 70116",
+   "website": "http://www.caneandtablenola.com/",
+   "source": "osm:node/1254389408"
+  },
+  {
+   "name": "Jewel of the South",
+   "category": "bar",
+   "lat": 29.95856,
+   "lng": -90.06948,
+   "address": "1026 St Louis St, New Orleans, LA 70112",
+   "website": "https://www.jewelnola.com/",
+   "source": "osm:node/6685945486"
+  },
+  {
+   "name": "Napoleon House",
+   "category": "restaurant",
+   "lat": 29.95586,
+   "lng": -90.06507,
+   "address": "500 Chartres St, New Orleans, LA 70130",
+   "website": "https://www.napoleonhouse.com/",
+   "source": "osm:node/331325950"
+  },
+  {
+   "name": "French 75 Bar",
+   "category": "bar",
+   "lat": 29.95576,
+   "lng": -90.06878,
+   "address": "813 Bienville St, New Orleans, LA 70112",
+   "website": "https://www.arnaudsrestaurant.com/bars/french-75",
+   "source": "google (Arnaud's)"
+  },
+  {
+   "name": "The Carousel Bar & Lounge",
+   "category": "bar",
+   "lat": 29.95426,
+   "lng": -90.06796,
+   "address": "214 Royal St, New Orleans, LA 70130",
+   "website": "http://hotelmonteleone.com/entertainment/carousel-bar",
+   "source": "osm:node/7963855385"
+  },
+  {
+   "name": "Sazerac Bar at The Roosevelt",
+   "category": "bar",
+   "lat": 29.9542,
+   "lng": -90.07216,
+   "address": "130 Roosevelt Way, New Orleans, LA 70112",
+   "source": "osm:node/8861224517"
+  },
+  {
+   "name": "Commander's Palace",
+   "category": "restaurant",
+   "lat": 29.92886,
+   "lng": -90.08423,
+   "address": "1403 Washington Ave, New Orleans, LA 70130",
+   "website": "https://www.commanderspalace.com/",
+   "source": "osm:way/328640841; site verified (OSM website was wrong)"
+  },
+  {
+   "name": "Cochon",
+   "category": "restaurant",
+   "lat": 29.94226,
+   "lng": -90.06725,
+   "address": "930 Tchoupitoulas St, New Orleans, LA 70130",
+   "website": "http://cochonrestaurant.com/",
+   "source": "osm:node/3348469218"
+  },
+  {
+   "name": "Compère Lapin",
+   "category": "restaurant",
+   "lat": 29.94788,
+   "lng": -90.06728,
+   "address": "535 Tchoupitoulas St, New Orleans, LA 70130",
+   "website": "http://comperelapin.com/",
+   "source": "osm:node/3354874752"
+  },
+  {
+   "name": "Turkey and the Wolf",
+   "category": "restaurant",
+   "lat": 29.92718,
+   "lng": -90.07431,
+   "address": "739 Jackson Ave, New Orleans, LA 70130",
+   "website": "http://www.turkeyandthewolf.com/",
+   "source": "osm:way/328019206"
+  },
+  {
+   "name": "Coop's Place",
+   "category": "bar",
+   "lat": 29.96016,
+   "lng": -90.05987,
+   "address": "1109 Decatur St, New Orleans, LA 70116",
+   "website": "https://www.coopsplace.net/",
+   "source": "osm:node/1254389413"
+  },
+  {
+   "name": "Pat O'Brien's",
+   "category": "bar",
+   "lat": 29.95809,
+   "lng": -90.06549,
+   "address": "718 St Peter St, New Orleans, LA 70116",
+   "website": "http://www.patobriens.com/",
+   "source": "osm:node/600497570"
+  },
+  {
+   "name": "Lafitte's Blacksmith Shop",
+   "category": "bar",
+   "lat": 29.96105,
+   "lng": -90.06358,
+   "address": "941 Bourbon St, New Orleans, LA 70116",
+   "website": "http://www.lafittesblacksmithshop.com/",
+   "source": "osm:node/3362581429"
+  },
+  {
+   "name": "Mimi's in the Marigny",
+   "category": "bar",
+   "lat": 29.96488,
+   "lng": -90.05128,
+   "address": "2601 Royal St, New Orleans, LA 70117",
+   "source": "nominatim address geocode"
+  },
+  {
+   "name": "Kermit's Mother-in-Law Lounge",
+   "category": "music_venue",
+   "lat": 29.97096,
+   "lng": -90.06678,
+   "address": "1500 N Claiborne Ave, New Orleans, LA 70116",
+   "website": "https://www.kermitslounge.com/",
+   "source": "osm:node/417259126; site verified"
+  },
+  {
+   "name": "Le Bon Temps Roulé",
+   "category": "music_venue",
+   "lat": 29.92054,
+   "lng": -90.10623,
+   "address": "4801 Magazine St, New Orleans, LA 70115",
+   "website": "https://lbtrnola.com/",
+   "source": "osm:node/4337982135"
+  },
+  {
+   "name": "Bar Tonique",
+   "category": "bar",
+   "lat": 29.96161,
+   "lng": -90.06722,
+   "address": "820 N Rampart St, New Orleans, LA 70116",
+   "website": "https://www.bartonique.com/",
+   "source": "osm:node/12378596095"
+  },
+  {
+   "name": "Twelve Mile Limit",
+   "category": "bar",
+   "lat": 29.96828,
+   "lng": -90.09984,
+   "address": "500 S Telemachus St, New Orleans, LA 70119",
+   "website": "https://www.twelvemilelimit.com/",
+   "source": "google"
+  },
+  {
+   "name": "Mid-City Lanes Rock 'n' Bowl",
+   "category": "music_venue",
+   "lat": 29.96042,
+   "lng": -90.11562,
+   "address": "3016 S Carrollton Ave, New Orleans, LA 70118",
+   "website": "https://www.rocknbowl.com/",
+   "source": "nominatim address geocode; site verified"
+  },
+  {
+   "name": "House of Blues New Orleans",
+   "category": "music_venue",
+   "lat": 29.9532,
+   "lng": -90.06608,
+   "address": "225 Decatur St, New Orleans, LA 70130",
+   "website": "https://neworleans.houseofblues.com/",
+   "source": "osm:node/4398319090; site verified"
+  },
+  {
+   "name": "The Joy Theater",
+   "category": "music_venue",
+   "lat": 29.95602,
+   "lng": -90.07399,
+   "address": "1200 Canal St, New Orleans, LA 70112",
+   "website": "https://thejoytheater.com/",
+   "source": "osm:way/962232438; site verified"
+  },
+  {
+   "name": "Saenger Theatre",
+   "category": "music_venue",
+   "lat": 29.95641,
+   "lng": -90.07256,
+   "address": "1111 Canal St, New Orleans, LA 70112",
+   "website": "https://www.saengernola.com/",
+   "source": "osm:way/367725783"
+  },
+  {
+   "name": "Orpheum Theater",
+   "category": "music_venue",
+   "lat": 29.95449,
+   "lng": -90.07282,
+   "address": "129 Roosevelt Way, New Orleans, LA 70112",
+   "website": "http://www.orpheumnola.com/",
+   "source": "osm:way/328669268"
+  },
+  {
+   "name": "Republic NOLA",
+   "category": "music_venue",
+   "lat": 29.94405,
+   "lng": -90.06572,
+   "address": "828 S Peters St, New Orleans, LA 70130",
+   "website": "http://republicnola.com/",
+   "source": "google"
+  },
+  {
+   "name": "Gasa Gasa",
+   "category": "music_venue",
+   "lat": 29.93481,
+   "lng": -90.10795,
+   "address": "4920 Freret St, New Orleans, LA 70115",
+   "website": "https://www.gasagasa.com/",
+   "source": "osm:way/327616451"
+  },
+  {
+   "name": "Santos Bar",
+   "category": "music_venue",
+   "lat": 29.96059,
+   "lng": -90.05946,
+   "address": "1135 Decatur St, New Orleans, LA 70116",
+   "website": "https://www.santosbar.com/",
+   "source": "osm:node/13630969501"
+  },
+  {
+   "name": "The Broadside",
+   "category": "music_venue",
+   "lat": 29.96892,
+   "lng": -90.08345,
+   "address": "600 N Broad St, New Orleans, LA 70119",
+   "website": "http://www.broadsidenola.com/",
+   "source": "osm:way/1327262239"
+  },
+  {
+   "name": "Fulton Alley",
+   "category": "bar",
+   "lat": 29.94698,
+   "lng": -90.06519,
+   "address": "600 Fulton St, New Orleans, LA 70130",
+   "website": "https://www.fultonalley.com/",
+   "source": "osm:node/4751332226"
+  },
+  {
+   "name": "One Eyed Jacks",
+   "category": "music_venue",
+   "lat": 29.95703,
+   "lng": -90.06475,
+   "address": "615 Toulouse St, New Orleans, LA 70130",
+   "website": "https://www.oneeyedjacks.net/",
+   "source": "nominatim address geocode (OSM node was misplaced); site from OSM"
+  },
+  {
+   "name": "Howlin' Wolf",
+   "category": "music_venue",
+   "lat": 29.94267,
+   "lng": -90.06605,
+   "address": "907 S Peters St, New Orleans, LA 70130",
+   "website": "http://thehowlinwolf.com/",
+   "source": "osm:node/2461004514"
+  },
+  {
+   "name": "Palm Court Jazz Cafe",
+   "category": "music_venue",
+   "lat": 29.96076,
+   "lng": -90.05907,
+   "address": "1204 Decatur St, New Orleans, LA 70116",
+   "website": "https://www.palmcourtjazzcafe.com/",
+   "source": "osm:node/5473737026; site verified"
+  },
+  {
+   "name": "Fritzel's European Jazz Pub",
+   "category": "music_venue",
+   "lat": 29.95929,
+   "lng": -90.06514,
+   "address": "733 Bourbon St, New Orleans, LA 70116",
+   "website": "https://www.fritzelsjazz.net/",
+   "source": "osm:node/3362581235"
+  },
+  {
+   "name": "The Jazz Playhouse",
+   "category": "music_venue",
+   "lat": 29.95582,
+   "lng": -90.06804,
+   "address": "300 Bourbon St, New Orleans, LA 70130",
+   "website": "https://www.thejazzplayhouse.com/",
+   "source": "osm:node/5473615621"
+  },
+  {
+   "name": "Circle Bar",
+   "category": "music_venue",
+   "lat": 29.94273,
+   "lng": -90.07248,
+   "address": "1032 St Charles Ave, New Orleans, LA 70130",
+   "website": "https://www.circlebarnola.com/",
+   "source": "osm:node/1274347317"
+  },
+  {
+   "name": "Siberia",
+   "category": "music_venue",
+   "lat": 29.9689,
+   "lng": -90.05591,
+   "address": "2227 St Claude Ave, New Orleans, LA 70117",
+   "website": "https://www.siberianola.com/",
+   "source": "osm:node/1186305105"
+  },
+  {
+   "name": "Balcony Music Club",
+   "category": "music_venue",
+   "lat": 29.96201,
+   "lng": -90.05823,
+   "address": "1331 Decatur St, New Orleans, LA 70116",
+   "website": "https://balconymusicclub.com/",
+   "source": "osm:node/417259127"
+  },
+  {
+   "name": "Dooky Chase's Restaurant",
+   "category": "restaurant",
+   "lat": 29.96806,
+   "lng": -90.0785,
+   "address": "2301 Orleans Ave, New Orleans, LA 70119",
+   "website": "https://www.dookychaserestaurants.com/",
+   "source": "osm:node/957358828; site verified"
+  },
+  {
+   "name": "Willie Mae's Scotch House",
+   "category": "restaurant",
+   "lat": 29.96917,
+   "lng": -90.07893,
+   "address": "2401 St Ann St, New Orleans, LA 70119",
+   "source": "osm:node/957358808"
+  },
+  {
+   "name": "Galatoire's",
+   "category": "restaurant",
+   "lat": 29.95497,
+   "lng": -90.06902,
+   "address": "209 Bourbon St, New Orleans, LA 70130",
+   "website": "https://www.galatoires.com/",
+   "source": "osm:node/1098313653"
+  },
+  {
+   "name": "Antoine's Restaurant",
+   "category": "restaurant",
+   "lat": 29.95672,
+   "lng": -90.06648,
+   "address": "713 St Louis St, New Orleans, LA 70130",
+   "website": "https://antoines.com/",
+   "source": "osm:node/5482884821"
+  },
+  {
+   "name": "Arnaud's",
+   "category": "restaurant",
+   "lat": 29.95574,
+   "lng": -90.06868,
+   "address": "813 Bienville St, New Orleans, LA 70112",
+   "website": "https://www.arnaudsrestaurant.com/",
+   "source": "osm:node/4789701524"
+  },
+  {
+   "name": "Brennan's",
+   "category": "restaurant",
+   "lat": 29.95619,
+   "lng": -90.06666,
+   "address": "417 Royal St, New Orleans, LA 70130",
+   "website": "https://www.brennansneworleans.com/",
+   "source": "osm:way/367725887"
+  },
+  {
+   "name": "Parkway Bakery & Tavern",
+   "category": "restaurant",
+   "lat": 29.97363,
+   "lng": -90.09024,
+   "address": "538 Hagan Ave, New Orleans, LA 70119",
+   "website": "https://parkwaypoorboys.com/",
+   "source": "osm:way/329692530"
+  },
+  {
+   "name": "Saturn Bar",
+   "category": "bar",
+   "lat": 29.96791,
+   "lng": -90.04422,
+   "address": "3067 St Claude Ave, New Orleans, LA 70117",
+   "website": "http://www.thesaturnbar.com/",
+   "source": "osm:node/4251798189"
+  },
+  {
+   "name": "Cafe Lafitte in Exile",
+   "category": "bar",
+   "lat": 29.96037,
+   "lng": -90.0642,
+   "address": "901 Bourbon St, New Orleans, LA 70116",
+   "website": "http://www.lafittes.com/",
+   "source": "osm:node/3362581344"
+  }
+ ]
+}

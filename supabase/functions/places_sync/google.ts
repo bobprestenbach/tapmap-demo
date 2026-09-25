@@ -1,5 +1,7 @@
-// Google Places API (New) Text Search provider. Behind ENABLE_GOOGLE_PLACES (off: billing disabled → 403).
-import { Hood, neighborhoodFor, normalizeUrl, VenueIn } from "./common.ts";
+// Google Places API (New) Text Search provider. Behind ENABLE_GOOGLE_PLACES.
+// Cost: Text Search with websiteUri/regularOpeningHours/rating/priceLevel/phone is billed at the Pro/Enterprise
+// tier (~$32-35 per 1000 requests); ~13 hoods x 3 queries x maxPages pages per weekly run.
+import { CHAIN_RE, Hood, neighborhoodFor, normalizeUrl, VenueIn } from "./common.ts";
 
 const ENDPOINT = "https://places.googleapis.com/v1/places:searchText";
 const FIELD_MASK = [
@@ -29,7 +31,8 @@ export async function fetchGoogleVenues(hoods: Hood[], opts: { maxPages?: number
   const key = Deno.env.get("GOOGLE_PLACES_API_KEY");
   if (!key) throw new Error("GOOGLE_PLACES_API_KEY not set");
   const out: VenueIn[] = [];
-  const stats = { requests: 0, raw: 0, skipped_outside: 0 };
+  const stats = { requests: 0, raw: 0, skipped_outside: 0, skipped_chain: 0 };
+  const seen = new Set<string>();
   for (const h of hoods) {
     for (const { q, category, type } of QUERIES) {
       let pageToken: string | undefined;
@@ -53,14 +56,20 @@ export async function fetchGoogleVenues(hoods: Hood[], opts: { maxPages?: number
         const j = (await r.json()) as { places?: GPlace[]; nextPageToken?: string };
         for (const p of j.places ?? []) {
           stats.raw++;
-          if (!p.location || !p.displayName?.text) continue;
+          if (!p.location || !p.displayName?.text || seen.has(p.id)) continue;
+          seen.add(p.id);
+          if (CHAIN_RE.test(p.displayName.text) ||
+            p.types?.some((t) => ["fast_food_restaurant", "meal_takeaway", "coffee_shop"].includes(t))) { stats.skipped_chain++; continue; }
           const lat = p.location.latitude, lng = p.location.longitude;
           const hood = neighborhoodFor(lat, lng);
           if (!hood) { stats.skipped_outside++; continue; }
-          const isBar = p.types?.some((t) => ["bar", "night_club", "pub", "wine_bar"].includes(t));
+          const types = p.types ?? [];
+          const isBar = types.some((t) => ["bar", "night_club", "pub", "wine_bar", "cocktail_bar", "lounge_bar", "sports_bar", "beer_garden", "brewpub"].includes(t));
+          const isMusic = types.some((t) => ["live_music_venue", "concert_hall", "performing_arts_theater", "amphitheatre", "night_club"].includes(t)) ||
+            /\b(jazz|music|blues|theat(er|re)|hall)\b/i.test(p.displayName.text);
           out.push({
             name: p.displayName.text, lat, lng,
-            category: category === "music_venue" ? "music_venue" : isBar ? "bar" : category,
+            category: category === "music_venue" && isMusic ? "music_venue" : isBar ? "bar" : category === "music_venue" ? "restaurant" : category,
             address: p.formattedAddress ?? null, neighborhood: hood, website: normalizeUrl(p.websiteUri),
             phone: p.nationalPhoneNumber ?? null,
             opening_hours: p.regularOpeningHours ? { google: p.regularOpeningHours } : null,

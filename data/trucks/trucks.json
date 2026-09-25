@@ -1,0 +1,1323 @@
+{
+ "_about": "Curated New Orleans food trucks & pop-ups for TapMap trucks_sync. Existence verified 2026-09-24 via the New Orleans Food Trucks association (StreetFoodFinder) member list, nola.today pop-up/venue pages, Roaming Hunger NOLA listings, NOLA Project truck calendar and the trucks' own sites. home_base = a regular documented spot; rotates_at = host venues where nola.today lists the pop-up in rotation (undated). Coordinates geocoded with Nominatim (OSM).",
+ "updated": "2026-09-24",
+ "calendars": [
+  {
+   "kind": "truck_calendar",
+   "name": "New Orleans Food Trucks (StreetFoodFinder association) – Who's Open",
+   "url": "https://www.neworleansfoodtrucks.com/",
+   "parser": "sff"
+  },
+  {
+   "kind": "popup_calendar",
+   "name": "NOLA.Today map – today",
+   "url": "https://nola.today/map.json?day=today",
+   "parser": "nolatoday"
+  },
+  {
+   "kind": "popup_calendar",
+   "name": "NOLA.Today map – tomorrow",
+   "url": "https://nola.today/map.json?day=tomorrow",
+   "parser": "nolatoday"
+  },
+  {
+   "kind": "brewery_calendar",
+   "name": "Twelve Mile Limit food pop-ups",
+   "url": "https://www.twelvemilelimit.com/",
+   "parser": "llm",
+   "host": "12-mile-limit"
+  },
+  {
+   "kind": "brewery_calendar",
+   "name": "The NOLA Project food truck schedule",
+   "url": "https://www.nolaproject.com/foodtrucks",
+   "parser": "llm"
+  }
+ ],
+ "hosts": [
+  {
+   "slug": "port-orleans-brewing-co",
+   "name": "Port Orleans Brewing Co.",
+   "type": "brewery",
+   "address": "4124 Tchoupitoulas Street, New Orleans, LA",
+   "lat": 29.916976,
+   "lng": -90.098285,
+   "website": null,
+   "rotation_source": "https://nola.today/venues/port-orleans-brewing-co"
+  },
+  {
+   "slug": "coffee-science",
+   "name": "Coffee Science",
+   "type": "cafe",
+   "address": "410 South Broad Avenue, New Orleans, LA",
+   "lat": 29.956499,
+   "lng": -90.095091,
+   "website": "https://coffeesciencenola.com/",
+   "rotation_source": "https://nola.today/venues/coffee-science"
+  },
+  {
+   "slug": "pals-lounge",
+   "name": "Pal's Lounge",
+   "type": "bar",
+   "address": "949 N Rendon Street, New Orleans, LA",
+   "lat": 29.976747,
+   "lng": -90.086377,
+   "website": null,
+   "rotation_source": "https://nola.today/venues/pal-s-lounge"
+  },
+  {
+   "slug": "second-vine-wine",
+   "name": "Second Vine Wine",
+   "type": "bar",
+   "address": "4212 Magazine Street, New Orleans, LA",
+   "lat": 29.920815,
+   "lng": -90.099521,
+   "website": "https://www.secondvinewine.shop/",
+   "rotation_source": "https://nola.today/venues/second-vine-wine"
+  },
+  {
+   "slug": "culture-park",
+   "name": "Culture Park",
+   "type": "bar",
+   "address": "3000 Franklin Avenue, New Orleans, LA",
+   "lat": 29.989564,
+   "lng": -90.049561,
+   "website": null,
+   "rotation_source": "https://nola.today/venues/culture-park"
+  },
+  {
+   "slug": "b-macs",
+   "name": "B Macs",
+   "type": "bar",
+   "address": "819 St. Louis Street, New Orleans, LA",
+   "lat": 29.957524,
+   "lng": -90.067308,
+   "website": "http://bmacsnola.com/",
+   "rotation_source": "https://nola.today/venues/b-macs"
+  },
+  {
+   "slug": "the-holy-ground",
+   "name": "The Holy Ground",
+   "type": "bar",
+   "address": "3340 Canal Street, New Orleans, LA",
+   "lat": 29.969556,
+   "lng": -90.093965,
+   "website": "https://theholygroundnola.com/",
+   "rotation_source": "https://nola.today/venues/the-holy-ground"
+  },
+  {
+   "slug": "parlays",
+   "name": "Parlay's",
+   "type": "bar",
+   "address": "870 Harrison Avenue, New Orleans, LA",
+   "lat": 30.00408,
+   "lng": -90.104254,
+   "website": null,
+   "rotation_source": "https://nola.today/venues/parlay-s"
+  },
+  {
+   "slug": "the-courtyard-brewery",
+   "name": "The Courtyard Brewery",
+   "type": "brewery",
+   "address": "1160 Camp Street, New Orleans, LA",
+   "lat": 29.940371,
+   "lng": -90.072057,
+   "website": null,
+   "rotation_source": "https://nola.today/venues/the-courtyard-brewery"
+  },
+  {
+   "slug": "cafe-istanbul",
+   "name": "Cafe Istanbul",
+   "type": "bar",
+   "address": "2372 St Claude Avenue, New Orleans, LA",
+   "lat": 29.968649,
+   "lng": -90.052452,
+   "website": "http://www.cafeistanbulnola.com/",
+   "rotation_source": "https://nola.today/venues/cafe-istanbul"
+  },
+  {
+   "slug": "henrys-uptown-bar",
+   "name": "Henry's Uptown Bar",
+   "type": "bar",
+   "address": "5101 Magazine Street, New Orleans, LA",
+   "lat": 29.920482,
+   "lng": -90.110195,
+   "website": null,
+   "rotation_source": "https://nola.today/venues/henry-s-uptown-bar"
+  },
+  {
+   "slug": "monkey-board",
+   "name": "Monkey Board",
+   "type": "bar",
+   "address": "1111 Gravier Street, New Orleans, LA",
+   "lat": 29.953253,
+   "lng": -90.074352,
+   "website": "https://www.monkeyboardnola.com/",
+   "rotation_source": "https://nola.today/venues/monkey-board"
+  },
+  {
+   "slug": "okay-bar",
+   "name": "Okay Bar",
+   "type": "bar",
+   "address": "1700 Port Street, New Orleans, LA",
+   "lat": 29.975026,
+   "lng": -90.047383,
+   "website": null,
+   "rotation_source": "https://nola.today/venues/okay-bar"
+  },
+  {
+   "slug": "barrel-proof",
+   "name": "Barrel Proof",
+   "type": "bar",
+   "address": "1201 Magazine Street, New Orleans, LA",
+   "lat": 29.939197,
+   "lng": -90.071171,
+   "website": "https://www.barrelproofnola.com/",
+   "rotation_source": "https://nola.today/venues/barrel-proof"
+  },
+  {
+   "slug": "second-line-brewing",
+   "name": "Second Line Brewing",
+   "type": "brewery",
+   "address": "433 N Bernadotte Street, New Orleans, LA",
+   "lat": 29.982488,
+   "lng": -90.105252,
+   "website": "https://www.secondlinebrewing.com/",
+   "rotation_source": "https://nola.today/venues/second-line-brewing"
+  },
+  {
+   "slug": "504-rum",
+   "name": "504 Rum",
+   "type": "bar",
+   "address": "1512 Carondelet Street, New Orleans, LA",
+   "lat": 29.939316,
+   "lng": -90.076844,
+   "website": "https://www.happyraptor.com",
+   "rotation_source": "https://nola.today/venues/504-rum"
+  },
+  {
+   "slug": "wetlands-sake",
+   "name": "Wetlands Sake",
+   "type": "brewery",
+   "address": "634 Orange Street, New Orleans, LA",
+   "lat": 29.932146,
+   "lng": -90.067309,
+   "website": "https://wetlandssake.com/taproom",
+   "rotation_source": "https://nola.today/venues/wetlands-sake"
+  },
+  {
+   "slug": "12-mile-limit",
+   "name": "12 Mile Limit",
+   "type": "bar",
+   "address": "500 S. Telemachus Street, New Orleans, LA",
+   "lat": 29.968249,
+   "lng": -90.099867,
+   "website": "https://www.twelvemilelimit.com",
+   "rotation_source": "https://nola.today/venues/12-mile-limit"
+  },
+  {
+   "slug": "brieux-carre",
+   "name": "Brieux Carre",
+   "type": "bar",
+   "address": "2115 Decatur Street, New Orleans, LA",
+   "lat": 29.962886,
+   "lng": -90.057405,
+   "website": "https://www.brieuxcarre.com",
+   "rotation_source": "https://nola.today/venues/brieux-carre"
+  },
+  {
+   "slug": "urban-south-brewery",
+   "name": "Urban South Brewery",
+   "type": "bar",
+   "address": "1645 Tchoupitoulas Street, New Orleans, LA",
+   "lat": 29.92968,
+   "lng": -90.066661,
+   "website": "https://urbansouthbrewery.com/",
+   "rotation_source": "https://nola.today/venues/urban-south"
+  },
+  {
+   "slug": "pepps-pub",
+   "name": "Pepp's Pub",
+   "type": "bar",
+   "address": "706 Franklin Avenue, New Orleans, LA",
+   "lat": 29.965157,
+   "lng": -90.051445,
+   "website": "https://www.peppspub.com/",
+   "rotation_source": "https://nola.today/venues/pepp-s-pub"
+  },
+  {
+   "slug": "banks-street-bar",
+   "name": "Banks Street Bar",
+   "type": "bar",
+   "address": "4401 Banks Street, New Orleans, LA",
+   "lat": 29.974514,
+   "lng": -90.106456,
+   "website": null,
+   "rotation_source": "https://nola.today/venues/banks-street-bar"
+  },
+  {
+   "slug": "trap-kitchen",
+   "name": "Trap Kitchen",
+   "type": "bar",
+   "address": "1043 Poland Avenue, New Orleans, LA",
+   "lat": 29.964399,
+   "lng": -90.031405,
+   "website": "https://www.neworleanstrapkitchen.com/",
+   "rotation_source": "https://nola.today/venues/trap-kitchen"
+  },
+  {
+   "slug": "oak-street-brewery",
+   "name": "Oak Street Brewery",
+   "type": "brewery",
+   "address": "8201 Oak Street, New Orleans, LA",
+   "lat": 29.948244,
+   "lng": -90.130705,
+   "website": "https://oakstbrewery.com/",
+   "rotation_source": "https://nola.today/venues/oak-street-brewery"
+  },
+  {
+   "slug": "zony-mash-beer-project",
+   "name": "Zony Mash Beer Project",
+   "type": "brewery",
+   "address": "3940 Thalia Street, New Orleans, LA",
+   "lat": 29.952155,
+   "lng": -90.097591,
+   "website": "https://www.zonymashbeer.com",
+   "rotation_source": "https://nola.today/venues/zony-mash-beer-project"
+  },
+  {
+   "slug": "parleaux-beer-lab",
+   "name": "Parleaux Beer Lab",
+   "type": "brewery",
+   "address": "634 Lesseps Street, New Orleans, LA",
+   "lat": 29.960746,
+   "lng": -90.034002,
+   "website": "https://www.parleauxbeerlab.com/",
+   "rotation_source": "https://nola.today/venues/parleaux-beer-lab"
+  },
+  {
+   "slug": "cask",
+   "name": "Cask",
+   "type": "bar",
+   "address": "5123 Canal Boulevard, New Orleans, LA",
+   "lat": 29.984133,
+   "lng": -90.11078,
+   "website": "https://casknola.com/",
+   "rotation_source": "https://nola.today/venues/cask"
+  },
+  {
+   "slug": "st-coffee",
+   "name": "St. Coffee",
+   "type": "cafe",
+   "address": "2718 St Claude Avenue, New Orleans, LA",
+   "lat": 29.968927,
+   "lng": -90.048826,
+   "website": null,
+   "rotation_source": "https://nola.today/venues/st-coffee"
+  },
+  {
+   "slug": "faubourg-brewery",
+   "name": "Faubourg Brewery",
+   "type": "brewery",
+   "address": "3501 Jourdan Road, New Orleans, LA",
+   "lat": 30.001886,
+   "lng": -90.019124,
+   "website": "https://faubourgbrewery.com",
+   "rotation_source": "https://nola.today/venues/faubourg-brewery"
+  },
+  {
+   "slug": "miel-brewery",
+   "name": "Miel Brewery",
+   "type": "brewery",
+   "address": "405 6th Street, New Orleans, LA",
+   "lat": 29.920281,
+   "lng": -90.079868,
+   "website": "https://www.mielbrewery.com",
+   "rotation_source": "https://nola.today/venues/miel-brewery"
+  },
+  {
+   "slug": "skeeta-hawk-brewing",
+   "name": "Skeeta Hawk Brewing",
+   "type": "brewery",
+   "address": "2606 St Louis Street, New Orleans, LA",
+   "lat": 29.967906,
+   "lng": -90.083467,
+   "website": "https://skeetahawkbrewing.com/",
+   "rotation_source": "https://nola.today/venues/skeeta-hawk-brewing"
+  },
+  {
+   "slug": "the-independent",
+   "name": "The Independent",
+   "type": "bar",
+   "address": "1226 South White Street, New Orleans, LA",
+   "lat": 29.954532,
+   "lng": -90.098651,
+   "website": "https://www.theindependentnola.com/",
+   "rotation_source": "https://nola.today/venues/the-independent"
+  },
+  {
+   "slug": "carrollton-station",
+   "name": "Carrollton Station",
+   "type": "bar",
+   "address": "8140 Willow Street, New Orleans, LA",
+   "lat": 29.949293,
+   "lng": -90.129211,
+   "website": "https://carrolltonstationbar.com/",
+   "rotation_source": "https://nola.today/venues/carrollton-station"
+  },
+  {
+   "slug": "music-box-village",
+   "name": "Music Box Village",
+   "type": "bar",
+   "address": "4557 North Rampart Street, New Orleans, LA",
+   "lat": 29.963282,
+   "lng": -90.030406,
+   "website": "https://musicboxvillage.com/",
+   "rotation_source": "https://nola.today/venues/music-box-village"
+  },
+  {
+   "slug": "deja-vieux-food-park",
+   "name": "Deja Vieux Food Park",
+   "type": "food_park",
+   "address": "1681 Religious Street, New Orleans, LA",
+   "lat": 29.929429,
+   "lng": -90.067752,
+   "website": null,
+   "rotation_source": null
+  },
+  {
+   "slug": "nola-brewing",
+   "name": "NOLA Brewing",
+   "type": "brewery",
+   "address": "3001 Tchoupitoulas Street, New Orleans, LA",
+   "lat": 29.919952,
+   "lng": -90.081418,
+   "website": null,
+   "rotation_source": null
+  },
+  {
+   "slug": "gasa-gasa",
+   "name": "Gasa Gasa",
+   "type": "bar",
+   "address": "4920 Freret Street, New Orleans, LA",
+   "lat": 29.934842,
+   "lng": -90.107909,
+   "website": null,
+   "rotation_source": null
+  },
+  {
+   "slug": "bayou-beer-garden",
+   "name": "Bayou Beer Garden",
+   "type": "bar",
+   "address": "326 N Norman C Francis Pkwy, New Orleans, LA",
+   "lat": 29.971967,
+   "lng": -90.091673,
+   "website": "https://www.bayoubeergarden.com/",
+   "rotation_source": "https://bugginoutboils.com/"
+  },
+  {
+   "slug": "original-thought-nola",
+   "name": "Original Thought NOLA",
+   "type": "food_truck_spot",
+   "address": "1857 Agriculture St, New Orleans, LA 70119",
+   "lat": 29.987627,
+   "lng": -90.065985,
+   "website": null,
+   "rotation_source": "https://www.neworleansfoodtrucks.com/member/originalthoughtnola"
+  }
+ ],
+ "trucks": [
+  {
+   "slug": "bonafried",
+   "name": "Bonafried",
+   "category": "food_truck",
+   "cuisine": "Fried chicken, American",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://www.neworleansfoodtrucks.com/member/BonafriedTruck",
+    "https://www.nolaproject.com/foodtrucks"
+   ]
+  },
+  {
+   "slug": "cocoa-cream-catering",
+   "name": "Cocoa & Cream Catering",
+   "category": "food_truck",
+   "cuisine": "Cajun/Creole",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://www.neworleansfoodtrucks.com/member/cocoaandcream"
+   ]
+  },
+  {
+   "slug": "creole-tomateaux",
+   "name": "Creole Tomateaux",
+   "category": "food_truck",
+   "cuisine": "Cajun/Creole",
+   "website": "https://creoletomateaux.com/",
+   "schedule_urls": [
+    "https://creoletomateaux.com/events"
+   ],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://www.neworleansfoodtrucks.com/member/CreoleTomateaux"
+   ]
+  },
+  {
+   "slug": "cr-pes-la-cart",
+   "name": "Crêpes à la Cart",
+   "category": "food_truck",
+   "cuisine": "Crêpes",
+   "website": "https://www.crepesalacartnola.com/",
+   "schedule_urls": [
+    "https://www.crepesalacartnola.com/events/"
+   ],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://www.neworleansfoodtrucks.com/member/crepesalacartnola",
+    "https://www.nolaproject.com/foodtrucks"
+   ]
+  },
+  {
+   "slug": "da-gms-smoke-soul-bbq",
+   "name": "Da GM's Smoke & Soul BBQ",
+   "category": "food_truck",
+   "cuisine": "Barbecue",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://www.neworleansfoodtrucks.com/member/dagrillmaster504"
+   ]
+  },
+  {
+   "slug": "dirty-dishes",
+   "name": "Dirty Dishes",
+   "category": "food_truck",
+   "cuisine": "Cajun/Creole",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://www.neworleansfoodtrucks.com/member/dirtydishesnola",
+    "https://roaminghunger.com/dirty-dishes/"
+   ]
+  },
+  {
+   "slug": "diva-dawg",
+   "name": "Diva Dawg",
+   "category": "food_truck",
+   "cuisine": "Gourmet hot dogs",
+   "website": "https://divadawg.com/",
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://www.neworleansfoodtrucks.com/member/DivaDawgTruck"
+   ]
+  },
+  {
+   "slug": "fat-boys-pizza",
+   "name": "Fat Boy's Pizza",
+   "category": "food_truck",
+   "cuisine": "Pizza",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://www.neworleansfoodtrucks.com/member/eatfatboyspizza"
+   ]
+  },
+  {
+   "slug": "fusion-eatz-by-shon",
+   "name": "Fusion Eatz by Shon",
+   "category": "food_truck",
+   "cuisine": "Creole fusion",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://www.neworleansfoodtrucks.com/member/Fusioneatz"
+   ]
+  },
+  {
+   "slug": "kajun-kidd-burgers-and-wings",
+   "name": "Kajun Kidd Burgers and Wings",
+   "category": "food_truck",
+   "cuisine": "Burgers, wings",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://www.neworleansfoodtrucks.com/member/kajunkiddbw"
+   ]
+  },
+  {
+   "slug": "kennys-cajun-creole-cuisine",
+   "name": "Kenny's Cajun & Creole Cuisine",
+   "category": "food_truck",
+   "cuisine": "Cajun/Creole",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://www.neworleansfoodtrucks.com/member/kennyscajuncreole",
+    "https://roaminghunger.com/kennys-cajun-creole-mobile-kitchen/"
+   ]
+  },
+  {
+   "slug": "la-cocinita",
+   "name": "La Cocinita",
+   "category": "food_truck",
+   "cuisine": "Venezuelan / Latin street food",
+   "website": "https://www.lacocinita.com/new-orleans",
+   "schedule_urls": [
+    "https://www.lacocinita.com/new-orleans"
+   ],
+   "instagram": "lacocinita",
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://www.neworleansfoodtrucks.com/member/LaCocinitaFoodTruck"
+   ]
+  },
+  {
+   "slug": "nola-munchies",
+   "name": "NOLA Munchies",
+   "category": "food_truck",
+   "cuisine": "American",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://www.neworleansfoodtrucks.com/member/nolamunchies"
+   ]
+  },
+  {
+   "slug": "original-thought-nola",
+   "name": "Original Thought NOLA",
+   "category": "food_truck",
+   "cuisine": "Plant-based",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": "original-thought-nola",
+   "rotates_at": [],
+   "verified_by": [
+    "https://www.neworleansfoodtrucks.com/member/originalthoughtnola"
+   ]
+  },
+  {
+   "slug": "petite-rouge",
+   "name": "Petite Rouge",
+   "category": "food_truck",
+   "cuisine": "Coffee",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://www.neworleansfoodtrucks.com/member/petiterougecoffee",
+    "https://roaminghunger.com/petite-rouge/"
+   ]
+  },
+  {
+   "slug": "rue-chow",
+   "name": "Rue Chow",
+   "category": "food_truck",
+   "cuisine": "American",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://www.neworleansfoodtrucks.com/member/rue.chow"
+   ]
+  },
+  {
+   "slug": "soulsation-kitchen",
+   "name": "Soulsation Kitchen",
+   "category": "food_truck",
+   "cuisine": "Soul food",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": "deja-vieux-food-park",
+   "rotates_at": [],
+   "verified_by": [
+    "https://www.neworleansfoodtrucks.com/member/dejavieuxfoodpa"
+   ]
+  },
+  {
+   "slug": "southerns",
+   "name": "Southern's",
+   "category": "food_truck",
+   "cuisine": "Fried chicken sandwiches",
+   "website": "https://southernsfood.com/",
+   "schedule_urls": [
+    "https://southernsfood.com/locations"
+   ],
+   "instagram": "southernsfood",
+   "home_base": null,
+   "rotates_at": [
+    "miel-brewery",
+    "second-line-brewing",
+    "zony-mash-beer-project"
+   ],
+   "verified_by": [
+    "https://www.neworleansfoodtrucks.com/member/southerns"
+   ]
+  },
+  {
+   "slug": "tacos-para-la-vida",
+   "name": "Tacos Para La Vida",
+   "category": "popup",
+   "cuisine": "Tacos",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": "tacosparalavida",
+   "home_base": null,
+   "rotates_at": [
+    "banks-street-bar",
+    "barrel-proof",
+    "carrollton-station",
+    "monkey-board",
+    "pals-lounge",
+    "second-line-brewing"
+   ],
+   "verified_by": [
+    "https://www.neworleansfoodtrucks.com/member/tacosparalavida"
+   ]
+  },
+  {
+   "slug": "tanjarin-kitchen",
+   "name": "Tanjariné Kitchen",
+   "category": "food_truck",
+   "cuisine": "Vegan",
+   "website": "https://tanjarines.com/",
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://www.neworleansfoodtrucks.com/member/TanjarineNOLA"
+   ]
+  },
+  {
+   "slug": "taceaux-loceaux",
+   "name": "Taceaux Loceaux",
+   "category": "food_truck",
+   "cuisine": "Tacos",
+   "website": "https://taceauxloceaux.square.site/",
+   "schedule_urls": [
+    "https://taceauxloceaux.square.site/"
+   ],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://www.neworleansfoodtrucks.com/member/taceauxloceaux"
+   ]
+  },
+  {
+   "slug": "johnnys-jamaican-grill",
+   "name": "Johnny's Jamaican Grill",
+   "category": "food_truck",
+   "cuisine": "Jamaican",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": "deja-vieux-food-park",
+   "rotates_at": [],
+   "verified_by": [
+    "https://roaminghunger.com/johnnys-jamaican-grill/"
+   ]
+  },
+  {
+   "slug": "frencheeze",
+   "name": "Frencheeze",
+   "category": "food_truck",
+   "cuisine": "Grilled cheese",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://roaminghunger.com/frencheeze/"
+   ]
+  },
+  {
+   "slug": "queen-on-wheels",
+   "name": "Queen on Wheels",
+   "category": "food_truck",
+   "cuisine": "Cajun/Creole",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://roaminghunger.com/queen-on-wheels/"
+   ]
+  },
+  {
+   "slug": "fete-au-fete-streatery",
+   "name": "Fete au Fete StrEATery",
+   "category": "food_truck",
+   "cuisine": "Cajun/Creole",
+   "website": "https://feteaufete.com/",
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://feteaufete.com/",
+    "https://roaminghunger.com/fete-au-fete-streatery/"
+   ]
+  },
+  {
+   "slug": "wolfs-burger-truck",
+   "name": "Wolf's Burger Truck",
+   "category": "food_truck",
+   "cuisine": "Burgers",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://roaminghunger.com/wolfs-burger-truck/"
+   ]
+  },
+  {
+   "slug": "mo-fries",
+   "name": "Mo Fries",
+   "category": "food_truck",
+   "cuisine": "Loaded fries",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://www.nolaproject.com/foodtrucks",
+    "https://nola.today/food"
+   ]
+  },
+  {
+   "slug": "fed-n-full",
+   "name": "Fed N Full",
+   "category": "food_truck",
+   "cuisine": "Comfort food",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [],
+   "verified_by": [
+    "https://www.nolaproject.com/foodtrucks"
+   ]
+  },
+  {
+   "slug": "kusina",
+   "name": "Kusina",
+   "category": "popup",
+   "cuisine": "Filipino",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": "kusinanola",
+   "home_base": null,
+   "rotates_at": [
+    "504-rum",
+    "gasa-gasa",
+    "miel-brewery",
+    "monkey-board",
+    "pals-lounge",
+    "pepps-pub",
+    "second-line-brewing",
+    "the-courtyard-brewery"
+   ],
+   "verified_by": [
+    "https://nola.today/food"
+   ]
+  },
+  {
+   "slug": "get-your-mom-dim-sum",
+   "name": "Get Your Mom & Dim Sum",
+   "category": "popup",
+   "cuisine": "Dim sum",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": "geturdimsum",
+   "home_base": null,
+   "rotates_at": [
+    "carrollton-station",
+    "henrys-uptown-bar",
+    "miel-brewery",
+    "oak-street-brewery",
+    "pals-lounge",
+    "second-line-brewing",
+    "skeeta-hawk-brewing",
+    "urban-south-brewery",
+    "zony-mash-beer-project"
+   ],
+   "verified_by": [
+    "https://nola.today/food"
+   ]
+  },
+  {
+   "slug": "joels-lobster-rolls",
+   "name": "Joel's Lobster Rolls",
+   "category": "popup",
+   "cuisine": "Lobster rolls",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": "joelslobsterrolls",
+   "home_base": null,
+   "rotates_at": [
+    "gasa-gasa",
+    "henrys-uptown-bar",
+    "miel-brewery",
+    "oak-street-brewery",
+    "parlays",
+    "parleaux-beer-lab",
+    "second-line-brewing",
+    "zony-mash-beer-project"
+   ],
+   "verified_by": [
+    "https://nola.today/food"
+   ]
+  },
+  {
+   "slug": "burger-nerds",
+   "name": "Burger Nerds",
+   "category": "popup",
+   "cuisine": "Smash burgers",
+   "website": "https://www.burgernerdsnola.com/",
+   "schedule_urls": [],
+   "instagram": "burger_nerds",
+   "home_base": null,
+   "rotates_at": [
+    "henrys-uptown-bar",
+    "pals-lounge",
+    "pepps-pub",
+    "the-holy-ground",
+    "trap-kitchen",
+    "zony-mash-beer-project"
+   ],
+   "verified_by": [
+    "https://nola.today/food"
+   ]
+  },
+  {
+   "slug": "bell-taco",
+   "name": "Bell Taco",
+   "category": "popup",
+   "cuisine": "Tacos",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": "bell__taco",
+   "home_base": null,
+   "rotates_at": [
+    "banks-street-bar",
+    "pals-lounge"
+   ],
+   "verified_by": [
+    "https://nola.today/food"
+   ]
+  },
+  {
+   "slug": "fish-hawk",
+   "name": "Fish Hawk",
+   "category": "popup",
+   "cuisine": "Seafood",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": "fishhawknola",
+   "home_base": "pals-lounge",
+   "rotates_at": [
+    "pals-lounge"
+   ],
+   "verified_by": [
+    "https://nola.today/food"
+   ]
+  },
+  {
+   "slug": "krewe-du-crave",
+   "name": "Krewe du Crave",
+   "category": "popup",
+   "cuisine": "Empanadas",
+   "website": "https://kreweducrave.com/",
+   "schedule_urls": [],
+   "instagram": "kreweducrave",
+   "home_base": null,
+   "rotates_at": [
+    "cask",
+    "monkey-board",
+    "parlays"
+   ],
+   "verified_by": [
+    "https://nola.today/food",
+    "https://kreweducrave.com/"
+   ]
+  },
+  {
+   "slug": "blue-bowls",
+   "name": "Blue Bowls",
+   "category": "popup",
+   "cuisine": "Bowls",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": "bluebowlsnola",
+   "home_base": null,
+   "rotates_at": [
+    "coffee-science",
+    "gasa-gasa",
+    "parlays"
+   ],
+   "verified_by": [
+    "https://nola.today/food"
+   ]
+  },
+  {
+   "slug": "berties-intergalactic-diner",
+   "name": "bertie's intergalactic diner",
+   "category": "popup",
+   "cuisine": "Diner",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": "berties.intergalactic.diner",
+   "home_base": null,
+   "rotates_at": [
+    "12-mile-limit",
+    "504-rum",
+    "carrollton-station",
+    "coffee-science"
+   ],
+   "verified_by": [
+    "https://nola.today/food"
+   ]
+  },
+  {
+   "slug": "only-flans",
+   "name": "Only Flans",
+   "category": "popup",
+   "cuisine": "Flan / desserts",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": "onlyflansbychefely",
+   "home_base": null,
+   "rotates_at": [
+    "504-rum",
+    "music-box-village",
+    "second-vine-wine",
+    "trap-kitchen"
+   ],
+   "verified_by": [
+    "https://nola.today/food"
+   ]
+  },
+  {
+   "slug": "the-nola-chuck-wagon",
+   "name": "The NOLA Chuck Wagon",
+   "category": "food_truck",
+   "cuisine": "American",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": "the_nola_chuck_wagon",
+   "home_base": null,
+   "rotates_at": [
+    "culture-park",
+    "wetlands-sake"
+   ],
+   "verified_by": [
+    "https://nola.today/food"
+   ]
+  },
+  {
+   "slug": "hamsters-handpies",
+   "name": "Hamster's Handpies",
+   "category": "popup",
+   "cuisine": "Hand pies",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": "hamstershandpies",
+   "home_base": "b-macs",
+   "rotates_at": [
+    "b-macs"
+   ],
+   "verified_by": [
+    "https://nola.today/food"
+   ]
+  },
+  {
+   "slug": "txow-txow-pintxos",
+   "name": "Txow Txow Pintxos",
+   "category": "popup",
+   "cuisine": "Basque pintxos",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": "txowtxowpintxos",
+   "home_base": null,
+   "rotates_at": [
+    "parleaux-beer-lab",
+    "the-courtyard-brewery"
+   ],
+   "verified_by": [
+    "https://nola.today/food"
+   ]
+  },
+  {
+   "slug": "little-kitchen",
+   "name": "Little Kitchen",
+   "category": "popup",
+   "cuisine": "Pop-up kitchen",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": "littlekitchennola",
+   "home_base": "cafe-istanbul",
+   "rotates_at": [
+    "cafe-istanbul"
+   ],
+   "verified_by": [
+    "https://nola.today/food"
+   ]
+  },
+  {
+   "slug": "rooted-n-cultured",
+   "name": "Rooted N Cultured",
+   "category": "popup",
+   "cuisine": "Fermented / plant-forward",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": "rootedncultured",
+   "home_base": "okay-bar",
+   "rotates_at": [
+    "okay-bar"
+   ],
+   "verified_by": [
+    "https://nola.today/food"
+   ]
+  },
+  {
+   "slug": "matchbook-kitchen",
+   "name": "Matchbook Kitchen",
+   "category": "popup",
+   "cuisine": "Bar food",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": "matchbookkitchen",
+   "home_base": "barrel-proof",
+   "rotates_at": [
+    "barrel-proof"
+   ],
+   "verified_by": [
+    "https://nola.today/food",
+    "https://www.wheretraveler.com/new-orleans/eat/tap-new-orleans-food-truck-and-brewery-scene"
+   ]
+  },
+  {
+   "slug": "que-pasta-nola",
+   "name": "Que Pasta NOLA",
+   "category": "popup",
+   "cuisine": "Latin street food",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": "quepasta_nola_latin_streetfood",
+   "home_base": null,
+   "rotates_at": [
+    "barrel-proof",
+    "st-coffee"
+   ],
+   "verified_by": [
+    "https://nola.today/food"
+   ]
+  },
+  {
+   "slug": "waska",
+   "name": "WASKA",
+   "category": "popup",
+   "cuisine": "Latin (cocina latina)",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": "waska_nola",
+   "home_base": null,
+   "rotates_at": [
+    "henrys-uptown-bar",
+    "miel-brewery",
+    "pepps-pub"
+   ],
+   "verified_by": [
+    "https://nola.today/food"
+   ]
+  },
+  {
+   "slug": "only-pans-pizza",
+   "name": "Only Pans Pizza",
+   "category": "popup",
+   "cuisine": "Pan pizza",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": "onlypanspizza",
+   "home_base": "henrys-uptown-bar",
+   "rotates_at": [
+    "henrys-uptown-bar"
+   ],
+   "verified_by": [
+    "https://nola.today/food"
+   ]
+  },
+  {
+   "slug": "third-wheel",
+   "name": "Third Wheel",
+   "category": "popup",
+   "cuisine": "Locally inspired brunch & dinner",
+   "website": "https://thirdwheelnola.com/",
+   "schedule_urls": [
+    "https://thirdwheelnola.com/"
+   ],
+   "instagram": "thirdwheelnola",
+   "home_base": "12-mile-limit",
+   "rotates_at": [
+    "12-mile-limit"
+   ],
+   "verified_by": [
+    "https://thirdwheelnola.com/",
+    "https://www.twelvemilelimit.com/"
+   ]
+  },
+  {
+   "slug": "hatch-harvest",
+   "name": "Hatch+Harvest",
+   "category": "popup",
+   "cuisine": "Seasonal",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": "hatchandharvest",
+   "home_base": null,
+   "rotates_at": [
+    "miel-brewery",
+    "pepps-pub",
+    "urban-south-brewery"
+   ],
+   "verified_by": [
+    "https://nola.today/food"
+   ]
+  },
+  {
+   "slug": "buggin-out-boils",
+   "name": "Buggin' Out Boils",
+   "category": "popup",
+   "cuisine": "Crawfish & Viet-Cajun boils",
+   "website": "https://bugginoutboils.com/",
+   "schedule_urls": [
+    "https://bugginoutboils.com/"
+   ],
+   "instagram": "bugginoutboils",
+   "home_base": "bayou-beer-garden",
+   "rotates_at": [
+    "faubourg-brewery"
+   ],
+   "verified_by": [
+    "https://bugginoutboils.com/"
+   ]
+  },
+  {
+   "slug": "gretas-sushi",
+   "name": "Greta's Sushi",
+   "category": "popup",
+   "cuisine": "Gulf-forward sushi",
+   "website": "https://gretassushi.com/",
+   "schedule_urls": [
+    "https://gretassushi.com/"
+   ],
+   "instagram": "gretassushi",
+   "home_base": null,
+   "rotates_at": [
+    "skeeta-hawk-brewing",
+    "the-independent"
+   ],
+   "verified_by": [
+    "https://gretassushi.com/"
+   ]
+  },
+  {
+   "slug": "asian-outdoor-kitchen",
+   "name": "Asian Outdoor Kitchen",
+   "category": "popup",
+   "cuisine": "Asian",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": "aokcaterer",
+   "home_base": "second-line-brewing",
+   "rotates_at": [
+    "second-line-brewing"
+   ],
+   "verified_by": [
+    "https://nola.today/food"
+   ]
+  },
+  {
+   "slug": "the-campfryer",
+   "name": "The Campfryer",
+   "category": "popup",
+   "cuisine": "Fried food",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": "thecampfryer",
+   "home_base": "miel-brewery",
+   "rotates_at": [
+    "miel-brewery"
+   ],
+   "verified_by": [
+    "https://nola.today/food"
+   ]
+  },
+  {
+   "slug": "twisted-tastebudz",
+   "name": "Twisted TasteBudz",
+   "category": "popup",
+   "cuisine": "Comfort food",
+   "website": null,
+   "schedule_urls": [],
+   "instagram": "thetwistedtastebudz",
+   "home_base": null,
+   "rotates_at": [
+    "brieux-carre",
+    "cask"
+   ],
+   "verified_by": [
+    "https://nola.today/food"
+   ]
+  }
+ ]
+}

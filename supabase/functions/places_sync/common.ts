@@ -3,6 +3,9 @@ import { db } from "../_shared/db.ts";
 import { haversineM, nameSimilarity, normName, point } from "../_shared/geo.ts";
 import { inc, JobCtx } from "../_shared/job.ts";
 
+/** Fast-food-ish / chain names skipped even without a brand tag. */
+export const CHAIN_RE = /\b(ihop|waffle house|shoney'?s|pizza hut|domino'?s|papa john'?s|subway|mcdonald'?s|burger king|wendy'?s|popeyes|starbucks|applebee'?s|chili'?s|hooters|olive garden|denny'?s|buffalo wild wings|taco bell|chipotle|panera|raising cane'?s|five guys|jimmy john'?s|blaze pizza|cava|pei wei|true food kitchen|dave (&|and) buster'?s|hard rock cafe|coyote ugly|cinnaholic|smoothie king|dunkin)\b/i;
+
 export type Hood = { name: string; lat: number; lng: number; r: number };
 
 /** Orleans Parish neighborhoods we import (center + radius in metres). */
@@ -101,7 +104,7 @@ export function dedupeBatch(rows: VenueIn[]): VenueIn[] {
   const sorted = [...rows].sort((a, b) => (b.quality ?? 0) - (a.quality ?? 0));
   for (const r of sorted) {
     const n = normName(r.name);
-    const dup = out.find((o) => (normName(o.name) === n || nameSimilarity(o.name, r.name) >= 0.92) &&
+    const dup = out.find((o) => (normName(o.name).replace(/ /g, "") === n.replace(/ /g, "") || nameSimilarity(o.name, r.name) >= 0.92) &&
       haversineM(o, r) < 150);
     if (dup) {
       // enrich keeper with missing fields
@@ -122,6 +125,11 @@ export async function loadExisting(): Promise<Existing[]> {
   return (data ?? []) as Existing[];
 }
 
+function host(u: string | null | undefined): string | null {
+  if (!u) return null;
+  try { return new URL(u).hostname.replace(/^www\./, "").toLowerCase(); } catch { return null; }
+}
+
 function findMatch(v: VenueIn, existing: Existing[], byOsm: Map<string, Existing>, byGoogle: Map<string, Existing>) {
   if (v.osm_id && byOsm.has(v.osm_id)) return byOsm.get(v.osm_id)!;
   if (v.google_place_id && byGoogle.has(v.google_place_id)) return byGoogle.get(v.google_place_id)!;
@@ -130,9 +138,13 @@ function findMatch(v: VenueIn, existing: Existing[], byOsm: Map<string, Existing
     if (e.lat == null || e.lng == null) continue;
     const d = haversineM(v, { lat: e.lat, lng: e.lng });
     if (d > 150) continue;
-    const sim = nameSimilarity(v.name, e.name);
+    let sim = nameSimilarity(v.name, e.name);
+    if (normName(v.name).replace(/ /g, "") === normName(e.name).replace(/ /g, "")) sim = 1;
+    // same website host nearby, or a very close point with a similar name, is the same place
+    if (host(v.website) && host(v.website) === host(e.website) && d < 100) sim = Math.max(sim, 0.85);
+    const need = d < 30 ? 0.6 : 0.8;
     const score = sim - d / 1500;
-    if (sim >= 0.8 && score > bestScore) { best = e; bestScore = score; }
+    if (sim >= need && score > bestScore) { best = e; bestScore = score; }
   }
   return best;
 }
@@ -183,12 +195,14 @@ export async function upsertVenues(ctx: JobCtx, rows: VenueIn[], deadline: numbe
     fill("address", v.address); fill("neighborhood", v.neighborhood); fill("website", v.website);
     fill("instagram", v.instagram); fill("phone", v.phone); fill("price_level", v.price_level);
     fill("photo_ref", v.photo_ref);
+    if (v.data_source === "curated" && v.website && cur.website !== v.website) patch.website = v.website;
     if (v.osm_id && !cur.osm_id) patch.osm_id = v.osm_id;
     if (v.google_place_id && !cur.google_place_id) patch.google_place_id = v.google_place_id;
     if (v.rating != null) patch.rating = v.rating;
     if (v.opening_hours) patch.opening_hours = { ...((cur.opening_hours as Record<string, unknown>) ?? {}), ...v.opening_hours };
     if (!cur.location) patch.location = point(v.lat, v.lng);
     if (v.force_category && cur.category !== v.category) patch.category = v.category;
+    else if (v.data_source === "google" && v.category === "music_venue" && cur.category === "bar") patch.category = v.category;
     else if (v.data_source === "osm" && cur.data_source === "osm" && cur.category !== "music_venue" &&
       v.category !== cur.category) patch.category = v.category;
     const siteForSource = (patch.website ?? cur.website) as string | null;

@@ -68,7 +68,8 @@ async function handle(ctx: JobCtx, s: SourceRow, force: boolean) {
     if (!s.venue_id) {
       status = "no_venue";
     } else {
-      const rows = r.items.map((it) => toRow(it, s.venue_id!, s.id, now));
+      const byId = new Map(r.items.map((it) => { const row = toRow(it, s.venue_id!, s.id, now); return [row.external_id, row]; }));
+      const rows = [...byId.values()];
       if (rows.length) {
         const { error } = await sb.from("happenings").upsert(rows, { onConflict: "external_id" });
         if (error) { inc(ctx, "errors"); status = `db_error: ${error.message.slice(0, 120)}`; newHash = s.content_hash; }
@@ -100,6 +101,7 @@ async function handle(ctx: JobCtx, s: SourceRow, force: boolean) {
     meta: {
       ...(s.meta ?? {}),
       pages: r.pages.map((p) => p.url),
+      failed_pages: r.failedPages,
       items: r.items.length,
       dropped: r.dropped.length,
       last_llm_at: r.llmCalled ? now : (s.meta?.last_llm_at ?? null),

@@ -1,6 +1,6 @@
 // OpenStreetMap (Overpass API) venue provider.
 import { USER_AGENT } from "../_shared/http.ts";
-import { Hood, neighborhoodFor, normalizeInstagram, normalizeUrl, VenueIn } from "./common.ts";
+import { CHAIN_RE, Hood, neighborhoodFor, normalizeInstagram, normalizeUrl, VenueIn } from "./common.ts";
 
 const MIRRORS = [
   "https://overpass-api.de/api/interpreter",
@@ -11,8 +11,6 @@ const MIRRORS = [
 
 export type OsmEl = { type: string; id: number; lat?: number; lon?: number; center?: { lat: number; lon: number }; tags?: Record<string, string> };
 
-/** Fast-food-ish / chain names skipped even without a brand tag. */
-const CHAIN_RE = /\b(ihop|waffle house|shoney'?s|pizza hut|domino'?s|papa john'?s|subway|mcdonald'?s|burger king|wendy'?s|popeyes|starbucks|applebee'?s|chili'?s|hooters|olive garden|denny'?s|buffalo wild wings|taco bell|chipotle|panera|raising cane'?s|five guys|jimmy john'?s|blaze pizza|cava|pei wei|true food kitchen|dave (&|and) buster'?s|hard rock cafe|coyote ugly|cinnaholic|smoothie king|dunkin)\b/i;
 
 function bbox(hoods: Hood[]): [number, number, number, number] {
   let s = 90, w = 180, n = -90, e = -180;

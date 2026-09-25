@@ -67,7 +67,7 @@ await Promise.all(Array.from({ length: 4 }, async () => {
 results.sort((a, b) => a.name.localeCompare(b.name));
 
 await Deno.mkdir(OUT, { recursive: true });
-await Deno.writeTextFile(`${OUT}/website_extraction_results.json`, JSON.stringify(results, null, 1));
+await Deno.writeTextFile(`${OUT}/website_extraction_results.json`, JSON.stringify(results.map(({ text: _t, ...r }) => r), null, 1));
 
 const DAYS = ["Sun", "Mon", "Tue", "Wed", "Thu", "Fri", "Sat"];
 const sched = (i: SiteResult["items"][number]) => i.date
