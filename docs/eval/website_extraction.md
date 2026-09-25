@@ -99,6 +99,55 @@ Details are in `website_extraction_auto.md`. Manual checks:
 - Title wording can change between LLM runs. When a page changes, this creates a new `external_id`, and the old row is
   marked `is_stale` rather than updated.
 
-## Full run over all website sources
+## Full run over all website sources (deployed edge function, 2026-09-25 00:10-00:24 UTC)
 
-See the "Full run" section below; it is filled in after the bulk run.
+There were 18 invocations of `{"limit":40,"concurrency":6}`, taking 40-60 s each. They covered 656 `sources` rows with kind `website`.
+
+| Source outcome | Count |
+|---|---|
+| ok (page changed, LLM run) | 352 (164 of them yielded at least 1 item) |
+| no_schedule_text (no time or day words, so no LLM call) | 92 |
+| no_text (JS-only or empty page) | 33 |
+| fetch_error (DNS/TLS/timeout) | 35 |
+| http 403 / 404 / other 4xx-5xx | 31 / 12 / 4 |
+| robots_blocked | 5 |
+| **pending_retry**: the AI Gateway returned 402 (out of credit) part-way through | 91 |
+
+Happenings upserted (`external_id` like `web:%`, all `is_stale=false`):
+
+| Kind | Rows | Venues | Recurring | Avg confidence |
+|---|---|---|---|---|
+| happy_hour | 103 | 79 | 97 | 0.91 |
+| special | 67 | 44 | 64 | 0.83 |
+| live_music | 268 | 59 | 72 | 0.88 |
+| event | 121 | 45 | 41 | 0.85 |
+| popup | 2 | 1 | 2 | 0.90 |
+| **total** | **561** | **161** | 276 | 0.87 |
+
+The **goal of at least 50 real happy hours/specials is met: there are 170** (103 happy hours and 67 specials) across about 100 venues.
+43 web-derived items appeared in `happenings_near` at 7:30pm CT on a Thursday.
+
+A post-run sanity check found 2 bad rows, which I marked stale. One was a happy hour "open until 6pm" that the model mapped to 00:00-18:00. The other was a plain "Weekend Brunch" service-hours item. New validation rules (`start_from_open`, `service_hours`) now drop these patterns.
+
+### LLM usage and cost
+
+| | Calls | Input tokens | Output tokens | Cost (gateway-reported) |
+|---|---|---|---|---|
+| Full run | 437 (345 ok + 92 failed with 402) | 1,050,273 | 153,866 | $1.82 |
+| Function smoke test | 7 | 21,026 | 4,691 | $0.04 |
+| Eval runs (4 x ~12 calls) | ~50 | ~150k | ~30k | ~$0.31 |
+
+That averages about 2.4k input and 350 output tokens per call, or **about $0.0042 per extraction**, which matches Haiku 4.5
+list price ($1/M in, $5/M out).
+
+### Steady-state cost and cadence
+
+- A source is re-fetched at most once every 20h. The LLM runs only when the text hash changes, **and** at most once every
+  72h per source (`min_llm_age_hours`, default 72). A changed page inside that window is `changed_deferred`: its rows are
+  re-verified and it is re-extracted on a later run.
+- Worst case, if every page changes every day, that is about 450 LLM-eligible sources / 3 ≈ 150 calls a day ≈ $0.63 a day ≈ **$19 a month**.
+  Realistically, many pages are static (hash unchanged), so expect **about $5-10 a month**.
+- **Recommended pg_cron schedule:** hourly, `{"limit":40,"concurrency":6}`. Each run takes about 40-60 s. 24 runs x 40 = 960 slots a
+  day, which is more than enough to cover all ~650 sources daily. Most runs will be quick no-ops, because sources run in the last 20h are skipped.
+- On an AI Gateway 402/429/5xx, the batch stops. The affected source is left queued, with no `last_run_at` or `content_hash` update, and
+  the `sync_runs` row is marked `ok=false` with `llm_unavailable` in counts.

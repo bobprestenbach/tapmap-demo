@@ -74,6 +74,7 @@ const info = await page.evaluate(() => ({
   live: document.querySelector(".tm-live-pill")?.textContent,
   scrollW: document.documentElement.scrollWidth,
   canvas: !!document.querySelector("canvas.maplibregl-canvas"),
+  zoom: window.__tmMap?.getZoom?.(),
 }));
 console.log(JSON.stringify(info));
 await page.screenshot({ path: out });

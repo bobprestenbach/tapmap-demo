@@ -102,8 +102,12 @@ function tuneStyle(map: maplibregl.Map) {
       else if (/trunk|primary/i.test(id)) set(id, "line-color", "#4a3141");
       else if (/secondary/i.test(id)) set(id, "line-color", "#393845");
       else if (/tertiary|minor|service|street/i.test(id)) set(id, "line-color", "#2c2b36");
-    } else if (layer.type === "symbol" && /city|town|capital/i.test(id)) {
-      set(id, "text-color", "#9a93e6");
+    } else if (layer.type === "symbol") {
+      const srcLayer = (layer as { "source-layer"?: string })["source-layer"];
+      // Hide basemap POIs/house numbers — TapMap's own pins are the points of interest.
+      if (srcLayer === "poi" || srcLayer === "housenumber") map.setLayoutProperty(id, "visibility", "none");
+      else if (/city|town|capital/i.test(id)) set(id, "text-color", "#9a93e6");
+      else if (/road labels/i.test(id)) set(id, "text-color", "#9895ad");
     }
   }
 }
@@ -261,8 +265,8 @@ export default function MapView(props: Props) {
         type: "geojson",
         data: toGeoJSON(propsRef.current.groups, propsRef.current.now),
         cluster: true,
-        clusterRadius: 32,
-        clusterMaxZoom: 13,
+        clusterRadius: 30,
+        clusterMaxZoom: 14,
         clusterProperties,
       });
       // Invisible layer so the source's tiles are built and queryable.
