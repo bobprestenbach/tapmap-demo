@@ -1,14 +1,20 @@
 // places_sync: import NOLA venues (bars, restaurants, music venues) into public.venues.
 //
-// Providers (param "provider"; default "google" when ENABLE_GOOGLE_PLACES=true, else "osm"):
-//   osm      OpenStreetMap via Overpass (enabled). Upsert on osm_id, name+distance merge.
-//   google   Google Places API (New) Text Search — only when ENABLE_GOOGLE_PLACES=true. Per-hood 6-day
-//            cache (sources kind=google_places); {"force":true} bypasses. Merges into OSM rows by name+<150 m.
+// Discovery for all cities (incl. New Orleans) now runs through city_sync (OSM + cheap Google Place
+// Details enrichment). This job remains for the New Orleans neighborhood import and curated lists.
+//
+// Providers (param "provider"; default "osm"):
+//   osm      OpenStreetMap via Overpass. Upsert on osm_id, name+distance merge.
+//   google   Google Places API (New) Text Search (Pro/Enterprise SKU, ~$35/1000 requests). No longer
+//            scheduled; only runs when requested explicitly with {"provider":"google"} and
+//            ENABLE_GOOGLE_PLACES=true. Per-hood 6-day cache (sources kind=google_places);
+//            {"force":true} bypasses. Merges into OSM rows by name+<150 m.
 //   curated  Upsert venues passed in the body as {"venues":[...]} (see data/venues/curated.json,
 //            scripts/venues/sync_curated.sh). Matches existing rows by name + <150 m and enriches.
 // Params: {"elements":[<pre-fetched Overpass elements>], "neighborhoods":["French Quarter",...], "includeNoWebsite":false, "dryRun":false, "maxPages":1}
 // Also upserts a sources row (kind='website', cadence='daily') for every venue with a website.
 import { db, flag } from "../_shared/db.ts";
+import { recordUsage } from "../_shared/budget.ts";
 import { inc, serveJob } from "../_shared/job.ts";
 import { dedupeBatch, neighborhoodFor, normalizeInstagram, normalizeUrl, selectHoods, upsertVenues, VenueIn } from "./common.ts";
 import { fetchGoogleVenues } from "./google.ts";
@@ -23,7 +29,7 @@ type CuratedIn = {
 
 serveJob("places_sync", async (ctx) => {
   const deadline = Date.now() + BUDGET_MS;
-  const provider = String(ctx.params.provider ?? (flag("ENABLE_GOOGLE_PLACES") ? "google" : "osm"));
+  const provider = String(ctx.params.provider ?? "osm");
   const hoods = selectHoods(ctx.params.neighborhoods);
   if (hoods.length === 0) throw new Error("no matching neighborhoods");
   ctx.counts.provider = provider;
@@ -63,7 +69,9 @@ serveJob("places_sync", async (ctx) => {
       }
       inc(ctx, "hoods_done");
     }
-    ctx.counts.est_cost_usd = Math.round((Number(ctx.counts.requests ?? 0) * 0.035) * 100) / 100;
+    ctx.counts.est_cost_usd = await recordUsage({
+      service: "google", sku: "google_text_enterprise", units: Number(ctx.counts.requests ?? 0), job: "places_sync",
+    });
     return;
   } else if (provider === "curated") {
     const list = (ctx.params.venues ?? []) as CuratedIn[];

@@ -2,10 +2,11 @@
 import { USER_AGENT } from "../_shared/http.ts";
 import { CHAIN_RE, Hood, neighborhoodFor, normalizeInstagram, normalizeUrl, VenueIn } from "./common.ts";
 
+// kumi first: overpass-api.de often answers 406 to the edge runtime and private.coffee times out.
 const MIRRORS = [
-  "https://overpass-api.de/api/interpreter",
   "https://overpass.kumi.systems/api/interpreter",
   "https://maps.mail.ru/osm/tools/overpass/api/interpreter",
+  "https://overpass-api.de/api/interpreter",
   "https://overpass.private.coffee/api/interpreter",
 ];
 
@@ -22,16 +23,24 @@ function bbox(hoods: Hood[]): [number, number, number, number] {
   return [s, w, n, e];
 }
 
-export async function overpass(query: string, timeoutMs = 60000, log?: (...a: unknown[]) => void): Promise<OsmEl[]> {
+/**
+ * POST an Overpass QL query, trying each mirror in turn. When `deadline` (epoch ms) is given, each
+ * attempt's timeout is capped so the whole call finishes before it.
+ */
+export async function overpass(
+  query: string, timeoutMs = 60000, log?: (...a: unknown[]) => void, deadline?: number,
+): Promise<OsmEl[]> {
   const errs: string[] = [];
   let lastErr = "";
   for (const url of MIRRORS) {
+    const left = deadline ? deadline - Date.now() : timeoutMs;
+    if (left < 5000) { errs.push(`${url} skipped (no time left)`); break; }
     try {
       const r = await fetch(url, {
         method: "POST",
         headers: { "user-agent": USER_AGENT, accept: "application/json", "content-type": "application/x-www-form-urlencoded" },
         body: "data=" + encodeURIComponent(query),
-        signal: AbortSignal.timeout(timeoutMs),
+        signal: AbortSignal.timeout(Math.min(timeoutMs, left)),
       });
       if (!r.ok) { lastErr = `${url} ${r.status} ${(await r.text()).slice(0, 120)}`; errs.push(lastErr); log?.("overpass", lastErr); continue; }
       const j = await r.json();
@@ -45,27 +54,35 @@ export async function overpass(query: string, timeoutMs = 60000, log?: (...a: un
   throw new Error(`All Overpass mirrors failed: ${errs.join(" | ")}`);
 }
 
-function address(t: Record<string, string>): string | null {
+function address(t: Record<string, string>, fallbackCity = "New Orleans"): string | null {
   const street = [t["addr:housenumber"], t["addr:street"]].filter(Boolean).join(" ");
   if (!street) return t["addr:full"] ?? null;
-  const city = t["addr:city"] ?? "New Orleans";
+  const city = t["addr:city"] ?? fallbackCity;
   const tail = [t["addr:state"] ?? "LA", t["addr:postcode"]].filter(Boolean).join(" ");
   return `${street}, ${city}, ${tail}`;
 }
 
 export type OsmOpts = { includeNoWebsite?: boolean; elements?: OsmEl[] };
 
-/** Fetch + map OSM venues for the given neighborhoods. */
-export async function fetchOsmVenues(hoods: Hood[], opts: OsmOpts, log: (...a: unknown[]) => void) {
-  const [s, w, n, e] = bbox(hoods);
+/** Overpass QL for named bars/pubs/restaurants/nightclubs/beer gardens/music venues + live_music=yes. */
+export function venueQuery(s: number, w: number, n: number, e: number, timeoutS = 30): string {
   const b = `${s.toFixed(5)},${w.toFixed(5)},${n.toFixed(5)},${e.toFixed(5)}`;
-  const q = `[out:json][timeout:30];(
+  return `[out:json][timeout:${timeoutS}];(
     nwr["amenity"~"^(bar|pub|restaurant|nightclub|biergarten|music_venue)$"]["name"](${b});
     nwr["live_music"="yes"]["name"](${b});
   );out center tags;`;
-  // Pre-fetched Overpass elements may be passed in (scripts/venues/osm_backfill.sh) when the
-  // edge runtime's egress IP is refused/slow at the Overpass mirrors.
-  const els = opts.elements?.length ? opts.elements : await overpass(q, 35000, log);
+}
+
+export type MapOpts = {
+  /** neighborhood label for a point; null = outside the area (skipped) */
+  hoodFor: (lat: number, lng: number) => string | null;
+  includeNoWebsite?: boolean;
+  /** city used in addresses when the element has no addr:city */
+  cityName?: string;
+};
+
+/** Map raw Overpass elements to VenueIn rows (skips chains, fast food, points outside the area). */
+export function mapOsmElements(els: OsmEl[], opts: MapOpts) {
   const stats = { raw: els.length, skipped_chain: 0, skipped_outside: 0, skipped_no_website: 0 };
   const out: VenueIn[] = [];
   const seen = new Set<string>();
@@ -79,7 +96,7 @@ export async function fetchOsmVenues(hoods: Hood[], opts: OsmOpts, log: (...a: u
     const amenity = t.amenity ?? "";
     if (amenity === "fast_food" || (amenity === "cafe" && t.live_music !== "yes")) continue;
     if (t.brand || t["brand:wikidata"] || CHAIN_RE.test(t.name)) { stats.skipped_chain++; continue; }
-    const hood = neighborhoodFor(lat, lng, hoods);
+    const hood = opts.hoodFor(lat, lng);
     if (!hood) { stats.skipped_outside++; continue; }
     const website = normalizeUrl(t.website ?? t["contact:website"] ?? t.url);
     const isMusic = amenity === "music_venue" || t.live_music === "yes" ||
@@ -90,11 +107,20 @@ export async function fetchOsmVenues(hoods: Hood[], opts: OsmOpts, log: (...a: u
     if (!website && category === "restaurant" && !opts.includeNoWebsite) { stats.skipped_no_website++; continue; }
     const hours = t.opening_hours ? { osm: t.opening_hours } : null;
     out.push({
-      name: t.name.trim(), category, lat, lng, address: address(t), neighborhood: hood, website,
+      name: t.name.trim(), category, lat, lng, address: address(t, opts.cityName), neighborhood: hood, website,
       instagram: normalizeInstagram(t["contact:instagram"] ?? t.instagram),
       phone: t.phone ?? t["contact:phone"] ?? null, opening_hours: hours, osm_id, data_source: "osm",
       quality: (website ? 4 : 0) + (t.opening_hours ? 2 : 0) + (t["addr:street"] ? 1 : 0) + (el.type === "node" ? 0.5 : 0),
     });
   }
   return { venues: out, stats };
+}
+
+/** Fetch + map OSM venues for the given New Orleans neighborhoods. */
+export async function fetchOsmVenues(hoods: Hood[], opts: OsmOpts, log: (...a: unknown[]) => void) {
+  const [s, w, n, e] = bbox(hoods);
+  // Pre-fetched Overpass elements may be passed in (scripts/venues/osm_backfill.sh) when the
+  // edge runtime's egress IP is refused/slow at the Overpass mirrors.
+  const els = opts.elements?.length ? opts.elements : await overpass(venueQuery(s, w, n, e), 35000, log);
+  return mapOsmElements(els, { hoodFor: (lat, lng) => neighborhoodFor(lat, lng, hoods), includeNoWebsite: opts.includeNoWebsite });
 }
