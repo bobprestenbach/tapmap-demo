@@ -1,6 +1,7 @@
 // website_sync: venue websites -> content hash -> (only if changed) LLM extraction -> happenings.
 // Params: {"limit":N (default 30), "force":bool (ignore 20h skip + re-run LLM), "source_ids":[uuid],
-//          "concurrency":N (default 5), "budget_ms":N (default 110000)}
+//          "concurrency":N (default 5), "budget_ms":N (default 110000),
+//          "min_llm_age_hours":N (default 72; changed pages re-extracted at most this often)}
 import { serveJob, inc, JobCtx } from "../_shared/job.ts";
 import { db } from "../_shared/db.ts";
 import { processSite, Item } from "./pipeline.ts";
@@ -41,11 +42,13 @@ function toRow(it: Item, venueId: string, sourceId: string, now: string) {
   };
 }
 
-async function handle(ctx: JobCtx, s: SourceRow, force: boolean) {
+async function handle(ctx: JobCtx, s: SourceRow, force: boolean, minLlmAgeH: number) {
   const sb = db();
   const now = new Date().toISOString();
   const venueName = s.venues?.name ?? new URL(s.url.startsWith("http") ? s.url : `https://${s.url}`).host;
-  const r = await processSite(s.url, { venueName, prevHash: force ? null : s.content_hash, forceLlm: force });
+  const lastLlm = Date.parse(String(s.meta?.last_llm_at ?? "")) || 0;
+  const skipLlm = !force && Date.now() - lastLlm < minLlmAgeH * 3600_000;
+  const r = await processSite(s.url, { venueName, prevHash: force ? null : s.content_hash, forceLlm: force, skipLlm });
   if (r.status === "llm_error" && /AI gateway (402|429|5\d\d)/.test(r.error ?? "")) {
     llmDown = true;
     inc(ctx, "llm_unavailable");
@@ -67,7 +70,7 @@ async function handle(ctx: JobCtx, s: SourceRow, force: boolean) {
   let status = r.status;
   let newHash: string | null = s.content_hash;
 
-  if (r.status === "unchanged" && prefix) {
+  if ((r.status === "unchanged" || r.status === "changed_deferred") && prefix) {
     await sb.from("happenings").update({ last_verified_at: now })
       .like("external_id", `${prefix}%`).eq("is_stale", false);
   } else if (r.hash && r.status !== "llm_error") {
@@ -125,6 +128,8 @@ serveJob("website_sync", async (ctx) => {
   const limit = Math.min(Number(ctx.params.limit ?? 30), 200);
   const concurrency = Math.max(1, Math.min(Number(ctx.params.concurrency ?? 5), 10));
   const force = truthy(ctx.params.force);
+  // Cost control: a changed page is re-sent to the LLM at most once per this many hours.
+  const minLlmAgeH = Number(ctx.params.min_llm_age_hours ?? 72);
   const ids = Array.isArray(ctx.params.source_ids) ? (ctx.params.source_ids as string[]) : null;
 
   let q = db().from("sources").select("id,url,venue_id,content_hash,meta,venues(name)").eq("kind", "website");
@@ -144,7 +149,7 @@ serveJob("website_sync", async (ctx) => {
     while (queue.length && !llmDown && Date.now() - t0 < budget - 35_000) {
       const s = queue.shift()!;
       try {
-        await handle(ctx, s, force);
+        await handle(ctx, s, force, minLlmAgeH);
       } catch (e) {
         inc(ctx, "errors");
         ctx.log("source failed", s.url, (e as Error).message);

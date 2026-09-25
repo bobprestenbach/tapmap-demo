@@ -419,7 +419,7 @@ const SCHEDULE_HINT =
 // ---------------------------------------------------------------------------
 export async function processSite(
   homepage: string,
-  opts: { venueName: string; prevHash?: string | null; forceLlm?: boolean; maxSubpages?: number; now?: Date },
+  opts: { venueName: string; prevHash?: string | null; forceLlm?: boolean; skipLlm?: boolean; maxSubpages?: number; now?: Date },
 ): Promise<SiteResult> {
   const today = chicagoDate(opts.now);
   const res: SiteResult = {
@@ -521,6 +521,8 @@ export async function processSite(
   const bodyChars = res.text.replace(/^### PAGE.*$/gm, "").trim().length;
   if (bodyChars < 200) { res.status = res.items.length ? "ok" : "no_text"; return res; }
   if (!SCHEDULE_HINT.test(res.text)) { res.status = "no_schedule_text"; return res; }
+  // Budget guard: page changed but was LLM-extracted recently; re-extract on a later run.
+  if (opts.skipLlm && opts.prevHash) { res.status = "changed_deferred"; return res; }
 
   const dow = new Date(`${today}T12:00:00Z`).toLocaleDateString("en-US", { weekday: "long", timeZone: "UTC" });
   const user = `Venue: ${opts.venueName}\nToday is ${dow} ${today} (America/Chicago).\n\n${res.text}`;
