@@ -28,7 +28,10 @@ function useMockFlag(): boolean {
   const [mock] = useState(
     () =>
       process.env.NEXT_PUBLIC_MOCK_DATA === "1" ||
-      (typeof window !== "undefined" && new URLSearchParams(window.location.search).get("mock") === "1"),
+      // ?mock=1 only in dev builds, or when explicitly allowed (e.g. local screenshot runs).
+      ((process.env.NODE_ENV !== "production" || process.env.NEXT_PUBLIC_MOCK_DATA === "allow") &&
+        typeof window !== "undefined" &&
+        new URLSearchParams(window.location.search).get("mock") === "1"),
   );
   return mock;
 }
@@ -204,9 +207,16 @@ export default function TapMapApp() {
   const liveTotal = sections[0].items.length;
   const upcomingTotal = sections[1].items.length + sections[2].items.length;
   const sheetTitle = liveTotal > 0 || status !== "ok" ? "Your city live" : "Quiet right now";
+  const hasAny = liveTotal + upcomingTotal > 0;
   const sheetSubtitle =
-    status === "offline"
-      ? "Offline — showing last update"
+    status === "offline" || status === "error"
+      ? hasAny
+        ? status === "offline"
+          ? "Offline — showing last update"
+          : "Couldn't refresh — showing last update"
+        : status === "offline"
+          ? "You're offline"
+          : "Couldn't load right now"
       : liveTotal > 0
         ? `${liveTotal} happening now · ${upcomingTotal} coming up`
         : upcomingTotal > 0

@@ -61,8 +61,26 @@ for (let attempt = 1; attempt <= 3; attempt++) {
 }
 await page.waitForTimeout(2500);
 if (flags.has("--click-first")) {
-  await page.locator(".tm-marker").first().click({ force: true }).catch((e) => console.log("click:", e.message));
+  // Click the live marker nearest the screen centre (DOM click so overlays don't intercept).
+  const clicked = await page.evaluate(() => {
+    const els = [...document.querySelectorAll(".tm-marker.live")];
+    const cx = innerWidth / 2, cy = innerHeight / 2;
+    let best = null, bd = Infinity;
+    for (const el of els) {
+      const r = el.getBoundingClientRect();
+      const d = Math.hypot(r.x + r.width / 2 - cx, r.y + r.height / 2 - cy);
+      if (r.y > 330 && r.y < innerHeight - 140 && d < bd) { best = el; bd = d; }
+    }
+    best?.parentElement?.dispatchEvent(new MouseEvent("click", { bubbles: true }));
+    return Boolean(best);
+  });
+  console.log("clicked marker:", clicked);
   await page.waitForTimeout(1500);
+}
+const chip = args.find((a) => a.startsWith("--chip="));
+if (chip) {
+  await page.locator(".tm-chip", { hasText: chip.slice(7) }).first().click({ timeout: 10000 });
+  await page.waitForTimeout(2500);
 }
 if (flags.has("--expand")) {
   await page.locator(".tm-sheet-grab").click().catch((e) => console.log("expand:", e.message));
