@@ -358,6 +358,12 @@ export async function normalizeItems(
       // happy hour with a start but no stated end at all: keep but less sure
       o.confidence = Math.min(Number(o.confidence ?? 0.6), 0.6);
     }
+    const ev0 = `${o.evidence ?? ""}`;
+    // "Open - 6pm" style windows: the model sometimes maps "open" to 00:00.
+    if (!date && start === "00:00" && end !== "23:59" && !/midnight|12\s*(:00)?\s*a\.?m/i.test(ev0)) { drop("start_from_open"); continue; }
+    // Plain meal-service hours (e.g. "Weekend Brunch 7-11am") are opening hours, not deals.
+    if (kind === "special" && !str(o.price_text, 5) && /\b(brunch|lunch|dinner|breakfast)\b/i.test(title) &&
+      !/\$|\d+\s*%|half|free|bottomless|special|deal|off\b/i.test(`${ev0} ${o.description ?? ""}`)) { drop("service_hours"); continue; }
     let conf = Number(o.confidence);
     if (!isFinite(conf)) conf = 0.6;
     conf = Math.max(0, Math.min(1, conf));

@@ -73,7 +73,7 @@ export default function TapMapApp() {
         if (first) {
           first = false;
           setOrigin(p);
-          mapApi.current?.flyTo(p.lat, p.lng, DEFAULT_ZOOM + 0.2);
+          mapApi.current?.flyTo(p.lat, p.lng, 14);
         }
       },
       () => {},

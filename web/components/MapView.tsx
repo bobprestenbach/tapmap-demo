@@ -80,7 +80,7 @@ function toGeoJSON(groups: VenueGroup[], now: number): GeoJSON.FeatureCollection
 function tuneStyle(map: maplibregl.Map) {
   const style = map.getStyle();
   if (!style?.layers) return;
-  const set = (id: string, prop: string, value: unknown) => {
+  const set = (id: string, prop: string, value: string | number) => {
     try {
       map.setPaintProperty(id, prop as Parameters<typeof map.setPaintProperty>[1], value);
     } catch {
@@ -98,8 +98,8 @@ function tuneStyle(map: maplibregl.Map) {
     else if (layer.type === "fill" && /commercial|retail|industrial|education|railway|military/i.test(id))
       set(id, "fill-opacity", 0.35);
     else if (layer.type === "line" && !outline) {
-      if (/highway/i.test(id)) set(id, "line-color", "#7d4256");
-      else if (/trunk|primary/i.test(id)) set(id, "line-color", "#4f3444");
+      if (/highway/i.test(id)) set(id, "line-color", "#723d50");
+      else if (/trunk|primary/i.test(id)) set(id, "line-color", "#4a3141");
       else if (/secondary/i.test(id)) set(id, "line-color", "#393845");
       else if (/tertiary|minor|service|street/i.test(id)) set(id, "line-color", "#2c2b36");
     } else if (layer.type === "symbol" && /city|town|capital/i.test(id)) {
@@ -215,7 +215,7 @@ export default function MapView(props: Props) {
           inner.classList.toggle("live", Number(p.live_n ?? 0) > 0);
           const count = Number(p.point_count ?? 0);
           (inner.firstElementChild as HTMLElement).textContent = count > 99 ? "99+" : String(count);
-          inner.style.setProperty("--s", `${Math.min(56, 38 + Math.log2(count) * 3)}px`);
+          inner.style.setProperty("--s", `${Math.min(48, 34 + Math.log2(count) * 3)}px`);
           el.style.zIndex = "5";
         } else {
           const key = String(p.key);
@@ -261,8 +261,8 @@ export default function MapView(props: Props) {
         type: "geojson",
         data: toGeoJSON(propsRef.current.groups, propsRef.current.now),
         cluster: true,
-        clusterRadius: 34,
-        clusterMaxZoom: 14,
+        clusterRadius: 32,
+        clusterMaxZoom: 13,
         clusterProperties,
       });
       // Invisible layer so the source's tiles are built and queryable.

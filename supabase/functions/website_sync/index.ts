@@ -15,6 +15,9 @@ type SourceRow = {
 };
 
 const SKIP_HOURS = 20;
+// Set when the AI Gateway is unavailable (402 out of credit, 429, 5xx): stop the batch and
+// leave the affected source un-run so it is retried next time.
+let llmDown = false;
 const truthy = (v: unknown) => v === true || v === "true" || v === "1";
 
 function toRow(it: Item, venueId: string, sourceId: string, now: string) {
@@ -43,6 +46,12 @@ async function handle(ctx: JobCtx, s: SourceRow, force: boolean) {
   const now = new Date().toISOString();
   const venueName = s.venues?.name ?? new URL(s.url.startsWith("http") ? s.url : `https://${s.url}`).host;
   const r = await processSite(s.url, { venueName, prevHash: force ? null : s.content_hash, forceLlm: force });
+  if (r.status === "llm_error" && /AI gateway (402|429|5\d\d)/.test(r.error ?? "")) {
+    llmDown = true;
+    inc(ctx, "llm_unavailable");
+    ctx.counts.llm_unavailable_error = (r.error ?? "").slice(0, 160);
+    return;
+  }
   inc(ctx, "sources");
   inc(ctx, "pages_fetched", r.pagesFetched);
   if (r.robotsBlocked) inc(ctx, "robots_blocked", r.robotsBlocked);
@@ -111,6 +120,7 @@ async function handle(ctx: JobCtx, s: SourceRow, force: boolean) {
 
 serveJob("website_sync", async (ctx) => {
   const t0 = Date.now();
+  llmDown = false;
   const budget = Number(ctx.params.budget_ms ?? 110_000);
   const limit = Math.min(Number(ctx.params.limit ?? 30), 200);
   const concurrency = Math.max(1, Math.min(Number(ctx.params.concurrency ?? 5), 10));
@@ -131,7 +141,7 @@ serveJob("website_sync", async (ctx) => {
   // Each site takes ~5-25s (polite per-host delays + one LLM call); stop picking new
   // sites when less than ~35s of budget remains.
   const worker = async () => {
-    while (queue.length && Date.now() - t0 < budget - 35_000) {
+    while (queue.length && !llmDown && Date.now() - t0 < budget - 35_000) {
       const s = queue.shift()!;
       try {
         await handle(ctx, s, force);
