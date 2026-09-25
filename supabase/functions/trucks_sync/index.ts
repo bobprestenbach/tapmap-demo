@@ -246,7 +246,7 @@ async function storeStops(
       location: point(loc.lat, loc.lng),
       location_name: locName,
       source_id: src.id,
-      source_url: src.kind === "instagram" ? src.url : src.url,
+      source_url: src.url,
       confidence: Math.max(0, Math.min(1, s.confidence ?? 0.7)),
       last_verified_at: runStarted,
       is_stale: false,
