@@ -2,27 +2,63 @@
 export const USER_AGENT =
   "TapMapBot/0.1 (+https://github.com/bobprestenbach/tapmap-demo; New Orleans happenings map)";
 
-const robotsCache = new Map<string, string[] | null>(); // host -> disallow prefixes for *
+type RobotsRule = { allow: boolean; re: RegExp; len: number };
+const robotsCache = new Map<string, RobotsRule[]>(); // origin -> rules applying to us
 const lastHit = new Map<string, number>();
 
-async function disallowsFor(origin: string): Promise<string[]> {
-  if (robotsCache.has(origin)) return robotsCache.get(origin) ?? [];
-  let rules: string[] = [];
+function ruleRegex(pattern: string): RegExp {
+  const anchored = pattern.endsWith("$");
+  const body = (anchored ? pattern.slice(0, -1) : pattern)
+    .split("*").map((part) => part.replace(/[.+?^${}()|[\]\\]/g, "\\$&")).join(".*");
+  return new RegExp("^" + body + (anchored ? "$" : ""));
+}
+
+/** RFC 9309 parsing: groups of consecutive User-agent lines; our group wins over '*'. */
+export function parseRobots(txt: string): RobotsRule[] {
+  const groups: { agents: string[]; rules: RobotsRule[] }[] = [];
+  let cur: { agents: string[]; rules: RobotsRule[] } | null = null;
+  let lastWasAgent = false;
+  for (const raw of txt.split(/\r?\n/)) {
+    const line = raw.split("#")[0].trim();
+    const i = line.indexOf(":");
+    if (i < 0) continue;
+    const k = line.slice(0, i).trim().toLowerCase(), v = line.slice(i + 1).trim();
+    if (k === "user-agent") {
+      if (!lastWasAgent || !cur) { cur = { agents: [], rules: [] }; groups.push(cur); }
+      cur.agents.push(v.toLowerCase());
+      lastWasAgent = true;
+    } else if ((k === "allow" || k === "disallow") && cur) {
+      lastWasAgent = false;
+      if (v) cur.rules.push({ allow: k === "allow", re: ruleRegex(v), len: v.length });
+    } else {
+      lastWasAgent = false;
+    }
+  }
+  const ours = groups.filter((g) => g.agents.some((a) => a.includes("tapmap")));
+  const chosen = ours.length ? ours : groups.filter((g) => g.agents.includes("*"));
+  return chosen.flatMap((g) => g.rules);
+}
+
+/** Longest matching rule wins; Allow wins ties; no match = allowed. */
+export function isAllowed(rules: RobotsRule[], path: string): boolean {
+  let best: RobotsRule | null = null;
+  for (const r of rules) {
+    if (!r.re.test(path)) continue;
+    if (!best || r.len > best.len || (r.len === best.len && r.allow)) best = r;
+  }
+  return !best || best.allow;
+}
+
+async function rulesFor(origin: string): Promise<RobotsRule[]> {
+  const cached = robotsCache.get(origin);
+  if (cached) return cached;
+  let rules: RobotsRule[] = [];
   try {
     const r = await fetch(`${origin}/robots.txt`, {
       headers: { "user-agent": USER_AGENT },
       signal: AbortSignal.timeout(8000),
     });
-    if (r.ok) {
-      let applies = false;
-      for (const raw of (await r.text()).split("\n")) {
-        const line = raw.split("#")[0].trim();
-        const [k, ...rest] = line.split(":");
-        const v = rest.join(":").trim();
-        if (/^user-agent$/i.test(k)) applies = v === "*" || /tapmap/i.test(v);
-        else if (applies && /^disallow$/i.test(k) && v) rules.push(v);
-      }
-    }
+    if (r.ok) rules = parseRobots(await r.text());
   } catch { rules = []; }
   robotsCache.set(origin, rules);
   return rules;
@@ -30,12 +66,7 @@ async function disallowsFor(origin: string): Promise<string[]> {
 
 export async function robotsAllowed(url: string): Promise<boolean> {
   const u = new URL(url);
-  const rules = await disallowsFor(u.origin);
-  const path = u.pathname + u.search;
-  return !rules.some((p) => {
-    const prefix = p.replace(/\*.*$/, "").replace(/\$$/, "");
-    return prefix !== "" && path.startsWith(prefix);
-  });
+  return isAllowed(await rulesFor(u.origin), u.pathname + u.search);
 }
 
 /** Fetch respecting robots.txt and a minimum delay per host. Returns null if disallowed. */
