@@ -264,3 +264,51 @@
   word-break: break-word;
   max-width: 420px;
 }
+
+.ad-budget {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.ad-budget > div {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 120px;
+  padding: 10px 14px;
+  border-radius: 12px;
+  border: 1px solid var(--line-soft);
+  background: var(--panel);
+}
+.ad-budget b {
+  font-size: 20px;
+  font-weight: 800;
+}
+.ad-budget b.ok {
+  color: var(--green);
+}
+.ad-budget b.bad {
+  color: #fca5a5;
+}
+.ad-cov-forms {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 16px;
+  margin: 14px 0 6px;
+}
+.ad-inline {
+  display: flex;
+  align-items: flex-end;
+  gap: 8px;
+}
+.ad-inline label {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  font-size: 12.5px;
+  color: var(--muted);
+}
+.ad-inline input {
+  width: 190px;
+}

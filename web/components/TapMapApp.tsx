@@ -3,12 +3,33 @@
 import dynamic from "next/dynamic";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { CATEGORIES, CHIP_ORDER, LIVE_COLOR, toggleCategory } from "@/lib/categories";
+import {
+  CITY_MIN_ZOOM,
+  CITY_PICK_MAX_ZOOM,
+  NOLA_CITY_ID,
+  bboxContains,
+  cityAt,
+  fetchCitiesInView,
+  fetchCityStatus,
+  markCityViewed,
+  mergeStatus,
+  padBBox,
+  requestCity,
+  rowToInfo,
+  searchCities,
+  toleranceForZoom,
+  type BBox,
+  type CityInfo,
+  type CityRow,
+  type CitySearchRow,
+} from "@/lib/cities";
 import { FETCH_RADIUS_M, NOLA_CENTER, SOON_MS, fetchHappenings, loadCache, saveCache } from "@/lib/data";
 import { dedupe, findNeighborhood, groupByVenue, groupKey, matchesQuery } from "@/lib/group";
 import { supabase } from "@/lib/supabase";
 import { haversineM } from "@/lib/time";
 import type { Category, Happening } from "@/lib/types";
 import BottomSheet, { type SheetSection, type SheetState } from "./BottomSheet";
+import CityCard from "./CityCard";
 import DetailCard from "./DetailCard";
 import { BroadcastIcon, LocateIcon, SearchIcon } from "./icons";
 import type { MapApi, ViewState } from "./MapView";
@@ -17,8 +38,9 @@ const MapView = dynamic(() => import("./MapView"), { ssr: false, loading: () => 
 
 const DEFAULT_ZOOM = 13.5;
 const USER_ZOOM = 14;
-const NEAR_NOLA_M = 25000;
 const REFRESH_MS = 60_000;
+const CITY_POLL_MS = 5000;
+const CITY_ZOOM = 13;
 
 type Status = "loading" | "ok" | "error" | "offline";
 type LatLng = { lat: number; lng: number };
@@ -52,6 +74,15 @@ export default function TapMapApp() {
   const mapApi = useRef<MapApi | null>(null);
   const pendingFly = useRef<LatLng | null>(null);
   const fetchSeq = useRef(0);
+  const [cities, setCities] = useState<CityRow[]>([]);
+  const [selectedCity, setSelectedCity] = useState<CityInfo | null>(null);
+  const [requesting, setRequesting] = useState(false);
+  const [requestReason, setRequestReason] = useState<string | null>(null);
+  const [suggestions, setSuggestions] = useState<CitySearchRow[]>([]);
+  const [searchFocus, setSearchFocus] = useState(false);
+  const [citiesNonce, setCitiesNonce] = useState(0);
+  const citiesFetched = useRef<{ bbox: BBox; tol: number; nonce: number } | null>(null);
+  const viewedCities = useRef(new Set<string>());
 
   // Clock tick for time labels / live state.
   useEffect(() => {
@@ -66,14 +97,13 @@ export default function TapMapApp() {
     if (c && c.items.length) setItems((prev) => (prev.length ? prev : c.items));
   }, []);
 
-  // Geolocation: use it as the origin only when near New Orleans.
+  // Geolocation: use it as the origin wherever the user is (cities outside coverage just look empty).
   useEffect(() => {
     if (!("geolocation" in navigator)) return;
     let first = true;
     const id = navigator.geolocation.watchPosition(
       (pos) => {
         const p = { lat: pos.coords.latitude, lng: pos.coords.longitude };
-        if (haversineM(p.lat, p.lng, NOLA_CENTER.lat, NOLA_CENTER.lng) > NEAR_NOLA_M) return;
         setUserLoc(p);
         if (first) {
           first = false;
@@ -143,6 +173,87 @@ export default function TapMapApp() {
     };
   }, [mock]);
 
+  // City outlines for the viewport (debounced; padded bbox so small pans don't refetch).
+  useEffect(() => {
+    if (!view || view.zoom < CITY_MIN_ZOOM) return;
+    const tol = toleranceForZoom(view.zoom);
+    const last = citiesFetched.current;
+    if (last && last.tol === tol && last.nonce === citiesNonce && bboxContains(last.bbox, view.bounds)) return;
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      const bbox = padBBox(view.bounds);
+      try {
+        const rows = await fetchCitiesInView(bbox, view.zoom, mock);
+        if (cancelled) return;
+        citiesFetched.current = { bbox, tol, nonce: citiesNonce };
+        setCities(rows);
+      } catch (e) {
+        console.warn("[cities]", (e as Error).message);
+      }
+    }, 400);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [view, mock, citiesNonce]);
+
+  const currentCity = useMemo(
+    () => (view && view.zoom >= 10 ? cityAt(cities, view.center.lat, view.center.lng) : null),
+    [cities, view],
+  );
+
+  // Keep viewed ready cities fresh on the backend (once per city per session).
+  useEffect(() => {
+    if (!currentCity || currentCity.status !== "ready" || viewedCities.current.has(currentCity.id)) return;
+    viewedCities.current.add(currentCity.id);
+    markCityViewed(currentCity.id, mock).catch(() => {});
+  }, [currentCity, mock]);
+
+  // Poll the selected city while it's loading; when it turns ready, refetch happenings + outlines.
+  const pollingId = selectedCity && (selectedCity.status === "queued" || selectedCity.status === "syncing") ? selectedCity.id : null;
+  useEffect(() => {
+    if (!pollingId) return;
+    const t = setInterval(async () => {
+      try {
+        const st = await fetchCityStatus(pollingId, mock);
+        if (!st) return;
+        setSelectedCity((c) => (c && c.id === st.id ? mergeStatus(c, st) : c));
+        setCities((rows) =>
+          rows.map((r) =>
+            r.id === st.id
+              ? { ...r, status: st.status, phase: st.phase, venue_count: st.venue_count, happening_count: st.happening_count }
+              : r,
+          ),
+        );
+        if (st.status === "ready" || st.venue_count > 0) loadRef.current();
+        if (st.status === "ready" || st.status === "error") setCitiesNonce((n) => n + 1);
+      } catch {
+        /* keep polling */
+      }
+    }, CITY_POLL_MS);
+    return () => clearInterval(t);
+  }, [pollingId, mock]);
+
+  // City suggestions for the search bar.
+  useEffect(() => {
+    const q = query.trim();
+    if (q.length < 2) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- clear stale suggestions
+      setSuggestions([]);
+      return;
+    }
+    let cancelled = false;
+    const t = setTimeout(() => {
+      searchCities(q, 5, mock)
+        .then((r) => !cancelled && setSuggestions(r))
+        .catch(() => !cancelled && setSuggestions([]));
+    }, 250);
+    return () => {
+      cancelled = true;
+      clearTimeout(t);
+    };
+  }, [query, mock]);
+
   // Items whose occurrence has ended since the last fetch drop out; live flag re-evaluated locally.
   const current = useMemo(() => {
     return dedupe(items)
@@ -154,12 +265,13 @@ export default function TapMapApp() {
   }, [items, now]);
 
   const hoodMatch = findNeighborhood(query);
+  const placeMatch = Boolean(hoodMatch) || suggestions.length > 0;
   const filtered = useMemo(() => {
     const base = current.filter((h) => (cats.length === 0 || cats.includes(h.category)) && (!liveOnly || h.is_live));
     const text = base.filter((h) => matchesQuery(h, query));
-    // A neighborhood name with no text hits just moves the map (on submit) instead of emptying it.
-    return text.length === 0 && hoodMatch ? base : text;
-  }, [current, cats, liveOnly, query, hoodMatch]);
+    // A neighborhood/city name with no text hits just moves the map (on submit) instead of emptying it.
+    return text.length === 0 && placeMatch ? base : text;
+  }, [current, cats, liveOnly, query, placeMatch]);
 
   // Map shows live + starting-soon pins; later-tonight items stay in the list unless nothing sooner exists.
   const mapItems = useMemo(() => {
@@ -232,6 +344,7 @@ export default function TapMapApp() {
   const select = useCallback(
     (key: string) => {
       setSelectedKey(key);
+      setSelectedCity(null);
       const g = groupsByKey.get(key);
       if (g) mapApi.current?.focus(g.lat, g.lng, Math.round(window.innerHeight * 0.55));
     },
@@ -240,14 +353,76 @@ export default function TapMapApp() {
 
   const pick = useCallback((h: Happening) => select(groupKey(h)), [select]);
 
+  // Open the city card (fresh status fetched in the background).
+  const openCity = useCallback(
+    (c: CityInfo | null) => {
+      setRequestReason(null);
+      setSelectedCity(c);
+      if (!c) return;
+      setSelectedKey(null);
+      fetchCityStatus(c.id, mock)
+        .then((st) => st && setSelectedCity((cur) => (cur && cur.id === st.id ? mergeStatus(cur, st) : cur)))
+        .catch(() => {});
+    },
+    [mock],
+  );
+
+  const cityCenter = (c: { id: string; lat: number | null; lng: number | null }) =>
+    c.id === NOLA_CITY_ID ? NOLA_CENTER : c.lat != null && c.lng != null ? { lat: c.lat, lng: c.lng } : null;
+
+  const pickSuggestion = (r: CitySearchRow) => {
+    setQuery("");
+    setSuggestions([]);
+    (document.activeElement as HTMLElement | null)?.blur();
+    const c = cityCenter(r);
+    if (c) mapApi.current?.flyTo(c.lat, c.lng, r.status === "ready" ? CITY_ZOOM : 11);
+    openCity(rowToInfo(r));
+  };
+
+  const showCity = () => {
+    if (!selectedCity) return;
+    const c = cityCenter(selectedCity);
+    if (c) mapApi.current?.flyTo(c.lat, c.lng, selectedCity.id === NOLA_CITY_ID ? DEFAULT_ZOOM : CITY_ZOOM);
+    setSelectedCity(null);
+  };
+
+  const loadCity = async () => {
+    const c = selectedCity;
+    if (!c || requesting) return;
+    setRequesting(true);
+    setRequestReason(null);
+    try {
+      const res = await requestCity(c.id, mock);
+      if (res.ok) {
+        const status = res.status ?? "queued";
+        setSelectedCity((cur) =>
+          cur && cur.id === c.id ? { ...cur, status, phase: status === "queued" ? "osm" : cur.phase } : cur,
+        );
+        setCities((rows) => rows.map((r) => (r.id === c.id ? { ...r, status, phase: status === "queued" ? "osm" : r.phase } : r)));
+      } else {
+        setRequestReason(res.reason ?? "error");
+      }
+    } catch {
+      setRequestReason("error");
+    } finally {
+      setRequesting(false);
+    }
+  };
+
   const onSearchSubmit = (e: React.FormEvent) => {
     e.preventDefault();
     const hood = findNeighborhood(query);
     if (hood) mapApi.current?.flyTo(hood.lat, hood.lng, 15);
+    else if (suggestions.length && filtered.every((h) => !matchesQuery(h, query))) return pickSuggestion(suggestions[0]);
     (document.activeElement as HTMLElement | null)?.blur();
   };
 
-  const effectiveNoResults = query && filtered.length === 0 && !hoodMatch;
+  const effectiveNoResults = query && filtered.length === 0 && !placeMatch;
+  const showSuggestions = searchFocus && suggestions.length > 0;
+  const hintCity =
+    !selectedCity && !selected && view && view.zoom > CITY_PICK_MAX_ZOOM && currentCity && currentCity.allowed && currentCity.status !== "ready"
+      ? currentCity
+      : null;
 
   return (
     <main className="tm-app">
@@ -267,6 +442,9 @@ export default function TapMapApp() {
           if (p) api.flyTo(p.lat, p.lng, USER_ZOOM);
         }}
         onError={(msg) => console.warn("[map]", msg)}
+        cities={cities}
+        selectedCityId={selectedCity?.id ?? null}
+        onCityPick={openCity}
       />
 
       <div className="tm-top">
@@ -288,6 +466,9 @@ export default function TapMapApp() {
             placeholder="What's poppin' near you?"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
+            onFocus={() => setSearchFocus(true)}
+            // Delay so a tap on a suggestion lands before the list unmounts.
+            onBlur={() => setTimeout(() => setSearchFocus(false), 150)}
             aria-label="Search venues, events, neighborhoods"
           />
           {query && (
@@ -296,6 +477,28 @@ export default function TapMapApp() {
             </button>
           )}
         </form>
+        {showSuggestions && (
+          <div className="tm-suggest" role="listbox" aria-label="Cities">
+            {suggestions.map((r) => (
+              <button
+                key={r.id}
+                role="option"
+                aria-selected={false}
+                onMouseDown={(e) => e.preventDefault()}
+                onClick={() => pickSuggestion(r)}
+                style={{
+                  ["--c" as string]: !r.allowed ? "#6d5fb0" : r.status === "ready" ? "#67e8f9" : r.status === "none" ? "#a78bfa" : "#f0abfc",
+                }}
+              >
+                <span className="tm-suggest-pin" />
+                <span className="tm-suggest-name">{r.name}</span>
+                <span className="tm-suggest-meta">
+                  {!r.allowed ? "Outside area" : r.status === "ready" ? "Live" : r.status === "none" ? "Tap to load" : "Loading…"}
+                </span>
+              </button>
+            ))}
+          </div>
+        )}
 
         <div className="tm-chips" role="toolbar" aria-label="Filters">
           <button
@@ -348,6 +551,34 @@ export default function TapMapApp() {
         distanceFor={distanceFor}
         onPick={pick}
       />
+
+      {hintCity && (
+        <button className="tm-city-hint" onClick={() => openCity(rowToInfo(hintCity))}>
+          <span>
+            {hintCity.status === "none" || hintCity.status === "error" ? (
+              <>
+                {hintCity.name} isn&apos;t on TapMap yet · <b>Load</b>
+              </>
+            ) : (
+              <>
+                Loading {hintCity.name}… <b>See progress</b>
+              </>
+            )}
+          </span>
+        </button>
+      )}
+
+      {selectedCity && !selected && (
+        <CityCard
+          key={selectedCity.id}
+          city={selectedCity}
+          requesting={requesting}
+          requestReason={requestReason}
+          onLoad={loadCity}
+          onShow={showCity}
+          onClose={() => setSelectedCity(null)}
+        />
+      )}
 
       {selected && (
         <>

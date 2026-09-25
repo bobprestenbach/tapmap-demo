@@ -422,10 +422,214 @@ function OverviewTab() {
   );
 }
 
+interface CoverageCity {
+  id: string;
+  name: string;
+  kind: string | null;
+  status: string;
+  phase: string | null;
+  prewarm: boolean;
+  attempts: number;
+  venue_count: number;
+  happening_count: number;
+  last_viewed_at: string | null;
+  requested_at: string | null;
+  refreshed_at: string | null;
+  last_error: string | null;
+}
+
+interface Budget {
+  cap_usd: number;
+  spent_usd: number;
+  remaining_usd: number;
+  by_sku: Record<string, { units: number; usd: number }>;
+}
+
+const usd = (n: number | string | null | undefined) => `$${Number(n ?? 0).toFixed(2)}`;
+
+function CoverageTab() {
+  const [data, setData] = useState<{ cities: CoverageCity[]; budget: Budget } | null>(null);
+  const [err, setErr] = useState("");
+  const [msg, setMsg] = useState("");
+  const [cap, setCap] = useState("");
+  const [name, setName] = useState("");
+  const [busy, setBusy] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    try {
+      const d = await api<{ cities: CoverageCity[]; budget: Budget }>("/api/admin/coverage");
+      setData(d);
+      setCap((c) => c || String(d.budget?.cap_usd ?? ""));
+      setErr("");
+    } catch (e) {
+      setErr((e as Error).message);
+    }
+  }, []);
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- initial data fetch
+    load();
+    const t = setInterval(load, 15_000);
+    return () => clearInterval(t);
+  }, [load]);
+
+  const request = async (body: { city_id?: string; name?: string }, key: string) => {
+    setBusy(key);
+    setMsg("");
+    try {
+      const r = await api<{ city_id: string; result: { ok: boolean; status?: string; reason?: string } }>("/api/admin/coverage", {
+        method: "POST",
+        body: JSON.stringify(body),
+      });
+      setMsg(
+        r.result.ok
+          ? `City ${r.city_id}: ${r.result.status ?? "queued"}`
+          : `City ${r.city_id} not queued: ${r.result.reason ?? "unknown"} (status ${r.result.status ?? "?"})`,
+      );
+      load();
+    } catch (e) {
+      setMsg((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  const saveCap = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setBusy("cap");
+    setMsg("");
+    try {
+      await api("/api/admin/settings", { method: "PATCH", body: JSON.stringify({ monthly_cap_usd: Number(cap) }) });
+      setMsg(`Monthly cap set to ${usd(cap)}`);
+      load();
+    } catch (e) {
+      setMsg((e as Error).message);
+    } finally {
+      setBusy(null);
+    }
+  };
+
+  if (err && !data) return <p className="ad-err">{err}</p>;
+  if (!data) return <p className="ad-muted">Loading…</p>;
+  const b = data.budget;
+  const skus = Object.entries(b?.by_sku ?? {}).sort((x, y) => y[1].usd - x[1].usd);
+  return (
+    <>
+      <h2 className="ad-h2">Monthly spend (America/Chicago month)</h2>
+      <div className="ad-budget">
+        <div>
+          <span className="ad-muted">Cap</span>
+          <b>{usd(b?.cap_usd)}</b>
+        </div>
+        <div>
+          <span className="ad-muted">Spent</span>
+          <b>{usd(b?.spent_usd)}</b>
+        </div>
+        <div>
+          <span className="ad-muted">Remaining</span>
+          <b className={Number(b?.remaining_usd) < 2 ? "bad" : "ok"}>{usd(b?.remaining_usd)}</b>
+        </div>
+      </div>
+      {skus.length > 0 && (
+        <div className="ad-table-wrap">
+          <table className="ad-table">
+            <thead>
+              <tr>
+                <th>SKU</th>
+                <th>Units</th>
+                <th>Est. USD</th>
+              </tr>
+            </thead>
+            <tbody>
+              {skus.map(([k, v]) => (
+                <tr key={k}>
+                  <td className="ad-mono">{k}</td>
+                  <td>{Number(v.units).toLocaleString()}</td>
+                  <td>{usd(v.usd)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      )}
+      <div className="ad-cov-forms">
+        <form onSubmit={saveCap} className="ad-inline">
+          <label>
+            Monthly cap (USD)
+            <input type="number" min={0} max={10000} step="1" value={cap} onChange={(e) => setCap(e.target.value)} />
+          </label>
+          <button className="ad-btn primary" disabled={busy === "cap" || cap === ""}>
+            Save cap
+          </button>
+        </form>
+        <form
+          className="ad-inline"
+          onSubmit={(e) => {
+            e.preventDefault();
+            if (name.trim()) request(/^\d{7}$/.test(name.trim()) ? { city_id: name.trim() } : { name }, "name");
+          }}
+        >
+          <label>
+            Load a city (name or GEOID)
+            <input value={name} placeholder="e.g. Lafayette" onChange={(e) => setName(e.target.value)} />
+          </label>
+          <button className="ad-btn primary" disabled={busy === "name" || name.trim().length < 2}>
+            Load now
+          </button>
+        </form>
+      </div>
+      {msg && <p className="ad-muted">{msg}</p>}
+      {err && <p className="ad-err">{err}</p>}
+
+      <h2 className="ad-h2">Cities ({data.cities.length})</h2>
+      <div className="ad-table-wrap">
+        <table className="ad-table">
+          <thead>
+            <tr>
+              <th>City</th>
+              <th>Status</th>
+              <th>Phase</th>
+              <th>Venues</th>
+              <th>Happenings</th>
+              <th>Last viewed</th>
+              <th>Refreshed</th>
+              <th>Last error</th>
+              <th />
+            </tr>
+          </thead>
+          <tbody>
+            {data.cities.map((c) => (
+              <tr key={c.id}>
+                <td>
+                  {c.name} <span className="ad-muted">{c.id}</span>
+                  {c.prewarm && <span className="ad-tag">prewarm</span>}
+                </td>
+                <td className={c.status === "ready" ? "ok" : c.status === "error" ? "bad" : ""}>{c.status}</td>
+                <td>{c.phase ?? "—"}</td>
+                <td>{c.venue_count}</td>
+                <td>{c.happening_count}</td>
+                <td>{c.last_viewed_at ? ago(c.last_viewed_at) : "—"}</td>
+                <td>{c.refreshed_at ? ago(c.refreshed_at) : "—"}</td>
+                <td className="ad-mono">{c.last_error ? `${c.last_error} (${c.attempts}×)` : ""}</td>
+                <td>
+                  {(c.status === "none" || c.status === "error") && (
+                    <button className="ad-btn" disabled={busy === c.id} onClick={() => request({ city_id: c.id }, c.id)}>
+                      Load now
+                    </button>
+                  )}
+                </td>
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      </div>
+    </>
+  );
+}
+
 export default function AdminApp() {
   const [authed, setAuthed] = useState<boolean | null>(null);
   const [dbConfigured, setDbConfigured] = useState(true);
-  const [tab, setTab] = useState<"happenings" | "overview">("happenings");
+  const [tab, setTab] = useState<"happenings" | "overview" | "coverage">("happenings");
 
   const check = useCallback(async () => {
     const s = await api<{ authed: boolean; dbConfigured: boolean }>("/api/admin/session").catch(() => ({ authed: false, dbConfigured: true }));
@@ -455,6 +659,9 @@ export default function AdminApp() {
           <button className={tab === "overview" ? "on" : ""} onClick={() => setTab("overview")}>
             Reports &amp; sync
           </button>
+          <button className={tab === "coverage" ? "on" : ""} onClick={() => setTab("coverage")}>
+            Coverage
+          </button>
         </nav>
         <button
           className="ad-btn"
@@ -467,7 +674,9 @@ export default function AdminApp() {
         </button>
       </header>
       {!dbConfigured && <p className="ad-err">SUPABASE_SERVICE_ROLE_KEY is not set on the server — admin data is unavailable.</p>}
-      <main className="ad-main">{tab === "happenings" ? <HappeningsTab /> : <OverviewTab />}</main>
+      <main className="ad-main">
+        {tab === "happenings" ? <HappeningsTab /> : tab === "overview" ? <OverviewTab /> : <CoverageTab />}
+      </main>
     </div>
   );
 }

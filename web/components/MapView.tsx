@@ -5,6 +5,7 @@ import * as maplibregl from "maplibre-gl";
 import type { GeoJSONSource, MapGeoJSONFeature } from "maplibre-gl";
 import "maplibre-gl/dist/maplibre-gl.css";
 import { CATEGORIES, metaFor } from "@/lib/categories";
+import { CITY_MIN_ZOOM, CITY_PICK_MAX_ZOOM, citiesToGeoJSON, tooltipText, type CityInfo, type CityRow } from "@/lib/cities";
 import type { Category, VenueGroup } from "@/lib/types";
 
 export interface MapApi {
@@ -30,9 +31,122 @@ interface Props {
   onView: (v: ViewState) => void;
   onReady: (api: MapApi) => void;
   onError?: (msg: string) => void;
+  cities: CityRow[];
+  selectedCityId: string | null;
+  /** Tap/click on a city outline (null = tapped empty map). */
+  onCityPick: (c: CityInfo | null) => void;
 }
 
 const SOURCE = "tm-points";
+const CITY_SOURCE = "tm-cities";
+const CITY_FILL = "tm-city-fill";
+
+const READY = "#67e8f9";
+const LOADING = "#f0abfc";
+const VIOLET = "#a78bfa";
+const OUTSIDE = "#6d5fb0";
+const cityColor = [
+  "case",
+  ["==", ["get", "allowed"], 0],
+  OUTSIDE,
+  ["match", ["get", "status"], "ready", READY, "queued", LOADING, "syncing", LOADING, VIOLET],
+] as unknown as maplibregl.ExpressionSpecification;
+const baseLineOpacity = [
+  "case",
+  ["==", ["get", "allowed"], 0],
+  0.3,
+  ["==", ["get", "status"], "ready"],
+  0.7,
+  0.42,
+] as unknown as maplibregl.ExpressionSpecification;
+const hot = ["any", ["boolean", ["feature-state", "hover"], false], ["boolean", ["feature-state", "selected"], false]];
+
+/** City outlines + fills, inserted under the basemap labels (markers are DOM, so always on top). */
+function addCityLayers(map: maplibregl.Map, data: GeoJSON.FeatureCollection) {
+  map.addSource(CITY_SOURCE, { type: "geojson", data, promoteId: "id" });
+  const beforeId = map.getStyle().layers?.find((l) => l.type === "symbol")?.id;
+  const fade = (v: unknown) =>
+    ["interpolate", ["linear"], ["zoom"], 6.5, v, 12, v, 15, ["*", 0.45, v]] as unknown as maplibregl.ExpressionSpecification;
+  map.addLayer(
+    {
+      id: CITY_FILL,
+      type: "fill",
+      source: CITY_SOURCE,
+      paint: {
+        "fill-color": cityColor,
+        "fill-opacity": [
+          "case",
+          ["boolean", ["feature-state", "selected"], false],
+          0.14,
+          ["boolean", ["feature-state", "hover"], false],
+          0.11,
+          ["==", ["get", "status"], "ready"],
+          0.03,
+          0,
+        ],
+      },
+    },
+    beforeId,
+  );
+  map.addLayer(
+    {
+      id: "tm-city-glow",
+      type: "line",
+      source: CITY_SOURCE,
+      paint: {
+        "line-color": cityColor,
+        "line-width": 5,
+        "line-blur": 4,
+        "line-opacity": ["case", hot as maplibregl.ExpressionSpecification, 0.55, 0],
+      },
+    },
+    beforeId,
+  );
+  map.addLayer(
+    {
+      id: "tm-city-line",
+      type: "line",
+      source: CITY_SOURCE,
+      filter: ["==", ["get", "allowed"], 1],
+      paint: {
+        "line-color": cityColor,
+        "line-width": ["case", hot as maplibregl.ExpressionSpecification, 1.8, 0.9],
+        "line-opacity": fade(baseLineOpacity),
+      },
+    },
+    beforeId,
+  );
+  map.addLayer(
+    {
+      id: "tm-city-line-out",
+      type: "line",
+      source: CITY_SOURCE,
+      filter: ["==", ["get", "allowed"], 0],
+      paint: {
+        "line-color": OUTSIDE,
+        "line-width": 0.8,
+        "line-dasharray": [2, 2],
+        "line-opacity": fade(0.32),
+      },
+    },
+    beforeId,
+  );
+}
+
+function featureToInfo(p: Record<string, unknown>): CityInfo {
+  return {
+    id: String(p.id),
+    name: String(p.name),
+    kind: p.kind ? String(p.kind) : null,
+    status: String(p.status) as CityInfo["status"],
+    phase: (p.phase ? String(p.phase) : null) as CityInfo["phase"],
+    allowed: Number(p.allowed) === 1,
+    venue_count: Number(p.venue_count ?? 0),
+    happening_count: Number(p.happening_count ?? 0),
+    lat: Number(p.lat),
+    lng: Number(p.lng),
+  };
+}
 
 // See scripts/copy-maplibre-worker.mjs — the worker is served from /public/maplibre.
 if (typeof window !== "undefined") {
@@ -105,7 +219,7 @@ function tuneStyle(map: maplibregl.Map) {
     } else if (layer.type === "symbol") {
       const srcLayer = (layer as { "source-layer"?: string })["source-layer"];
       // Hide basemap POIs/house numbers — TapMap's own pins are the points of interest.
-      if (srcLayer === "poi" || srcLayer === "housenumber") map.setLayoutProperty(id, "visibility", "none");
+      if (srcLayer === "poi" || srcLayer === "housenumber" || srcLayer === "mountain_peak") map.setLayoutProperty(id, "visibility", "none");
       else if (/city|town|capital/i.test(id)) set(id, "text-color", "#9a93e6");
       else if (/road labels/i.test(id)) set(id, "text-color", "#9895ad");
     }
@@ -132,6 +246,8 @@ export default function MapView(props: Props) {
   const propsRef = useRef(props);
   const readyRef = useRef(false);
   const rafRef = useRef<number | null>(null);
+  const tipRef = useRef<HTMLDivElement>(null);
+  const selCityRef = useRef<string | null>(null);
 
   useEffect(() => {
     propsRef.current = props;
@@ -150,7 +266,7 @@ export default function MapView(props: Props) {
       pitchWithRotate: false,
       dragRotate: false,
       maxZoom: 18,
-      minZoom: 9,
+      minZoom: 6.5,
       fadeDuration: 150,
     });
     map.touchZoomRotate.disableRotation();
@@ -276,9 +392,58 @@ export default function MapView(props: Props) {
         source: SOURCE,
         paint: { "circle-radius": 1, "circle-opacity": 0 },
       });
+      addCityLayers(map, citiesToGeoJSON(propsRef.current.cities));
       readyRef.current = true;
       schedule();
       emitView();
+    });
+
+    // ---- city hover (desktop) + tap/click (all devices). DOM markers stop their own clicks.
+    const tip = tipRef.current;
+    let hoverId: string | null = null;
+    const setHover = (id: string | null) => {
+      if (id === hoverId) return;
+      if (hoverId != null && map.getSource(CITY_SOURCE)) map.setFeatureState({ source: CITY_SOURCE, id: hoverId }, { hover: false });
+      hoverId = id;
+      if (id != null) map.setFeatureState({ source: CITY_SOURCE, id }, { hover: true });
+      map.getCanvas().style.cursor = id != null ? "pointer" : "";
+      if (id == null && tip) tip.style.opacity = "0";
+    };
+    const cityUnder = (point: maplibregl.PointLike): Record<string, unknown> | null => {
+      if (!readyRef.current || !map.getLayer(CITY_FILL)) return null;
+      const feats = map.queryRenderedFeatures(point, { layers: [CITY_FILL] });
+      let best: Record<string, unknown> | null = null;
+      for (const f of feats) {
+        const p = f.properties as Record<string, unknown>;
+        if (!best || Number(p.area) < Number(best.area)) best = p;
+      }
+      return best;
+    };
+    const canHover = window.matchMedia?.("(hover: hover) and (pointer: fine)").matches ?? false;
+    const pickable = () => map.getZoom() <= CITY_PICK_MAX_ZOOM && map.getZoom() >= CITY_MIN_ZOOM - 0.5;
+    if (canHover) {
+      map.on("mousemove", (e) => {
+        const onCanvas = e.originalEvent.target === map.getCanvas();
+        const p = onCanvas && pickable() ? cityUnder(e.point) : null;
+        setHover(p ? String(p.id) : null);
+        if (p && tip) {
+          tip.textContent = tooltipText({
+            name: String(p.name),
+            status: String(p.status),
+            allowed: Number(p.allowed),
+            venue_count: Number(p.venue_count ?? 0),
+          });
+          tip.style.transform = `translate(${Math.round(e.point.x + 14)}px, ${Math.round(e.point.y + 16)}px)`;
+          tip.style.opacity = "1";
+        }
+      });
+      map.getCanvas().addEventListener("mouseleave", () => setHover(null));
+      map.on("movestart", () => setHover(null));
+    }
+    map.on("click", (e) => {
+      if (e.originalEvent.target !== map.getCanvas()) return;
+      const p = pickable() ? cityUnder(e.point) : null;
+      propsRef.current.onCityPick(p ? featureToInfo(p) : null);
     });
     map.on("render", schedule);
     map.on("moveend", emitView);
@@ -322,6 +487,28 @@ export default function MapView(props: Props) {
     map.triggerRepaint();
   }, [props.groups, props.now]);
 
+  // City outlines data.
+  useEffect(() => {
+    const map = mapRef.current;
+    if (!map || !readyRef.current) return;
+    (map.getSource(CITY_SOURCE) as GeoJSONSource | undefined)?.setData(citiesToGeoJSON(props.cities));
+  }, [props.cities]);
+
+  // Selected city highlight (feature-state survives setData because ids are promoted).
+  useEffect(() => {
+    const map = mapRef.current;
+    const id = props.selectedCityId;
+    const apply = () => {
+      if (!map || !map.getSource(CITY_SOURCE)) return;
+      const prev = selCityRef.current;
+      if (prev && prev !== id) map.setFeatureState({ source: CITY_SOURCE, id: prev }, { selected: false });
+      if (id) map.setFeatureState({ source: CITY_SOURCE, id }, { selected: true });
+      selCityRef.current = id;
+    };
+    if (map && readyRef.current) apply();
+    else if (map) map.once("load", () => setTimeout(apply, 0));
+  }, [props.selectedCityId, props.cities]);
+
   // Selection highlight.
   useEffect(() => {
     for (const [id, m] of markersRef.current) {
@@ -355,6 +542,7 @@ export default function MapView(props: Props) {
   return (
     <div className="tm-map">
       <div ref={containerRef} className="tm-map-inner" />
+      <div ref={tipRef} className="tm-city-tip" aria-hidden="true" />
     </div>
   );
 }
