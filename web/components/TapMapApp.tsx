@@ -16,6 +16,7 @@ import type { MapApi, ViewState } from "./MapView";
 const MapView = dynamic(() => import("./MapView"), { ssr: false, loading: () => <div className="tm-map" /> });
 
 const DEFAULT_ZOOM = 13.5;
+const USER_ZOOM = 14;
 const NEAR_NOLA_M = 25000;
 const REFRESH_MS = 60_000;
 
@@ -46,6 +47,7 @@ export default function TapMapApp() {
   const [sheet, setSheet] = useState<SheetState>("peek");
   const [now, setNow] = useState(() => Date.now());
   const mapApi = useRef<MapApi | null>(null);
+  const pendingFly = useRef<LatLng | null>(null);
   const fetchSeq = useRef(0);
 
   // Clock tick for time labels / live state.
@@ -73,7 +75,8 @@ export default function TapMapApp() {
         if (first) {
           first = false;
           setOrigin(p);
-          mapApi.current?.flyTo(p.lat, p.lng, 14);
+          if (mapApi.current) mapApi.current.flyTo(p.lat, p.lng, USER_ZOOM);
+          else pendingFly.current = p;
         }
       },
       () => {},
@@ -247,7 +250,12 @@ export default function TapMapApp() {
         now={now}
         onSelect={select}
         onView={onView}
-        onReady={(api) => (mapApi.current = api)}
+        onReady={(api) => {
+          mapApi.current = api;
+          const p = pendingFly.current;
+          pendingFly.current = null;
+          if (p) api.flyTo(p.lat, p.lng, USER_ZOOM);
+        }}
         onError={(msg) => console.warn("[map]", msg)}
       />
 

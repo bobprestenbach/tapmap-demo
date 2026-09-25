@@ -107,6 +107,8 @@ async function ensureSources(venueIds: Map<string, string>): Promise<void> {
 // geocoding (curated hosts -> cache -> US Census (addresses) -> Nominatim (names))
 // ---------------------------------------------------------------------------
 let geocodesThisRun = 0;
+// Set when the AI Gateway fails with 402/429/5xx/timeout; remaining LLM sources stay queued (hash not saved).
+let llmDown: string | null = null;
 let lastNominatim = 0;
 
 function matchHost(name?: string | null, address?: string | null): Host | null {
@@ -354,7 +356,11 @@ async function processSource(
     return;
   }
 
-  await db().from("raw_pages").insert({ source_id: src.id, url: src.url, content_hash: hash, text: text.slice(0, 200_000) });
+  const { data: lastPage } = await db().from("raw_pages").select("content_hash")
+    .eq("source_id", src.id).order("fetched_at", { ascending: false }).limit(1).maybeSingle();
+  if (lastPage?.content_hash !== hash) {
+    await db().from("raw_pages").insert({ source_id: src.id, url: src.url, content_hash: hash, text: text.slice(0, 200_000) });
+  }
 
   if (!stops) {
     if (!text.trim() || !looksLikeSchedule(text)) {
@@ -362,6 +368,7 @@ async function processSource(
       inc(ctx, "llm_skipped_no_schedule_text");
     } else {
       if (deadline - Date.now() < 35_000) { inc(ctx, "deferred_for_time"); return; } // retry next run (hash not saved)
+      if (llmDown) { inc(ctx, "llm_deferred"); await mark(src, `llm_deferred:${llmDown}`); return; } // hash not saved -> retried later
       const p = chicagoNow();
       const today = `${p.year}-${p.month}-${p.day} (${p.weekday})`;
       const truck = src.meta.truck ? TRUCKS.find((t) => t.slug === src.meta.truck) : null;
@@ -377,9 +384,14 @@ async function processSource(
         );
         stops = Array.isArray(out?.stops) ? out.stops : [];
       } catch (e) {
-        ctx.log("llm error", src.url, String(e).slice(0, 300));
+        const msg = String(e);
+        ctx.log("llm error", src.url, msg.slice(0, 300));
         inc(ctx, "llm_errors");
-        await mark(src, "llm_error");
+        // Gateway out of credit / rate limited / down: stop calling it for the rest of this run.
+        const code = msg.match(/AI gateway (\d{3})/)?.[1];
+        if (code && (code === "402" || code === "429" || code[0] === "5")) llmDown = code;
+        else if (/timeout|timed out|abort/i.test(msg)) llmDown = "timeout";
+        await mark(src, `llm_error${code ? ":" + code : ""}`);
         return; // hash not saved -> retried next run
       }
     }
@@ -402,6 +414,7 @@ serveJob("trucks_sync", async (ctx) => {
   const runStarted = new Date().toISOString();
   const limit = Math.max(1, Math.min(200, Number(ctx.params.limit ?? 30)));
   geocodesThisRun = 0;
+  llmDown = null;
 
   const venueIds = await ensureVenues(ctx);
   await ensureSources(venueIds);

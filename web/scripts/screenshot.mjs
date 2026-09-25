@@ -42,11 +42,23 @@ page.on("console", (m) => m.type() === "error" && console.log("[console]", m.tex
 page.on("requestfailed", (r) => console.log("[failed]", r.url().replace(/key=[^&]+/, "key=***").slice(0, 120), r.failure()?.errorText));
 page.on("pageerror", (e) => console.log("[pageerror]", e.message));
 const target = `${url}${url.includes("?") ? "&" : "?"}debug=1${flags.has("--mock") ? "&mock=1" : ""}`;
-await page.goto(target, { waitUntil: "load", timeout: 60000 }).catch((e) => console.log("goto:", e.message));
-// Tiles come through a slow proxy in CI: wait for the map to go idle (max 60s).
-await page
-  .waitForFunction(() => { const m = window.__tmMap; return m && m.loaded() && m.areTilesLoaded(); }, null, { timeout: 60000, polling: 500 })
-  .catch(() => console.log("map did not report idle in time"));
+// Tiles come through a slow/flaky proxy in CI: wait for the map to go idle, reload up to 3x.
+for (let attempt = 1; attempt <= 3; attempt++) {
+  await page.goto(target, { waitUntil: "load", timeout: 60000 }).catch((e) => console.log("goto:", e.message));
+  const ok = await page
+    .waitForFunction(
+      () => {
+        const m = window.__tmMap;
+        return m && m.loaded() && m.areTilesLoaded() && document.querySelectorAll(".tm-marker,.tm-cluster").length > 0;
+      },
+      null,
+      { timeout: 45000, polling: 500 },
+    )
+    .then(() => true)
+    .catch(() => false);
+  if (ok) break;
+  console.log(`attempt ${attempt}: map not ready, retrying`);
+}
 await page.waitForTimeout(2500);
 if (flags.has("--click-first")) {
   await page.locator(".tm-marker").first().click({ force: true }).catch((e) => console.log("click:", e.message));

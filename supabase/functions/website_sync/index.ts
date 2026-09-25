@@ -158,4 +158,6 @@ serveJob("website_sync", async (ctx) => {
   await Promise.all(Array.from({ length: concurrency }, worker));
   ctx.counts.remaining_in_batch = queue.length;
   ctx.counts.elapsed_ms = Date.now() - t0;
+  // Surface gateway outages (e.g. out of credit) as a failed run in sync_runs.
+  if (llmDown) throw new Error(`AI gateway unavailable: ${ctx.counts.llm_unavailable_error ?? ""}`);
 });
