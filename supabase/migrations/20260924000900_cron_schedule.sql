@@ -31,7 +31,7 @@ end $$;
 
 -- Times are UTC. America/Chicago = UTC-5 (CDT) / UTC-6 (CST).
 select cron.schedule('tapmap_places_sync',  '17 8 * * 1',     $$select private.invoke_job('places_sync')$$);             -- weekly, Mon ~3am CT
-select cron.schedule('tapmap_website_sync', '7 * * * *',      $$select private.invoke_job('website_sync', '{"limit":15}')$$); -- hourly batches => every site ~daily
+select cron.schedule('tapmap_website_sync', '7 * * * *',      $$select private.invoke_job('website_sync', '{"limit":40,"concurrency":6}')$$); -- hourly batches => every site ~daily
 select cron.schedule('tapmap_events_tm',    '23 */6 * * *',   $$select private.invoke_job('events_sync', '{"adapters":["ticketmaster","seatgeek"]}')$$);
 select cron.schedule('tapmap_events_wwoz',  '41 */6 * * *',   $$select private.invoke_job('events_sync', '{"adapters":["wwoz"],"days":4}')$$);
 select cron.schedule('tapmap_trucks_sync',  '*/30 * * * *',   $$select private.invoke_job('trucks_sync')$$);
