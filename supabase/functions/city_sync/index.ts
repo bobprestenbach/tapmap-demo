@@ -18,6 +18,7 @@
 //           marks the city ready/done and refreshes its counts.
 // Phases chain within one invocation while time allows; otherwise the claim is released and the job
 // re-invokes itself for the same city. Failures: attempts++, status='error' (retried after 15 min, <5 tries).
+// If Overpass fails again on a retry, the osm phase is skipped and the city goes to Google discovery instead.
 import { db, flag } from "../_shared/db.ts";
 import { budgetStatus, UsageTally } from "../_shared/budget.ts";
 import { haversineM, nameSimilarity } from "../_shared/geo.ts";
@@ -405,7 +406,17 @@ serveJob(JOB, async (ctx) => {
       const left = deadline - Date.now();
       if (phase === "osm") {
         if (left < 60_000) break;
-        const kept = await phaseOsm(ctx, city, deadline);
+        let kept: number | null;
+        try {
+          kept = await phaseOsm(ctx, city, deadline);
+        } catch (e) {
+          // Overpass mirrors are often down/refusing from the edge runtime. After one failed attempt,
+          // fall back to Google discovery (free IDs-only search, capped Details) so the city isn't stuck.
+          const msg = e instanceof Error ? e.message : String(e);
+          if (!/Overpass/i.test(msg) || (city.attempts ?? 0) < 1) throw e;
+          ctx.counts.osm_fallback = msg.slice(0, 160);
+          kept = 0;
+        }
         if (kept == null) break;
         phase = kept < DISCOVER_BELOW ? "discover" : "enrich";
       } else if (phase === "discover") {
