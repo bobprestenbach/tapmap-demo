@@ -163,3 +163,27 @@ sub-agents (city loader, events/websites, frontend), with the lead doing schema,
 - **Real "Load" not pressed from the UI:** loads were exercised through `city_sync` and the prewarm queue,
   and the UI flow was tested in mock mode.
 - **Admin Coverage tab untested against live data** (no service key in the sandbox); it needs one look after deploy.
+
+## Prewarm result (checked 2026-09-25 03:40 UTC)
+
+All 11 prewarm cities reached `ready`. Slidell failed once because Overpass was down, then loaded on its retry.
+
+| City | Venues | Happenings (current) |
+|---|---|---|
+| New Orleans | 844 | 1,105 |
+| Baton Rouge | 133 | 20 |
+| Metairie | 129 | 5 |
+| Lake Charles | 94 | 22 |
+| Kenner | 92 | 32 |
+| Lafayette | 86 | 44 |
+| Mandeville | 80 | 36 |
+| Houma | 57 | 37 |
+| Covington | 50 | 26 |
+| Hammond | 43 | 12 |
+| Slidell | 37 | 7 |
+
+- **Spend so far this month:** Google $0 (698 Details and 487 IDs-only searches, all inside the free tiers); LLM $1.59 (326 calls).
+- **Happening counts** keep rising as `website_sync` works through the new cities' sites.
+- **OSM is thinner outside New Orleans:** Baton Rouge's 133 venues is low for its size. Google discovery only runs when OSM
+  keeps fewer than 25, so mid-size cities depend on OSM completeness. Raising that threshold, or running discovery for
+  every city, would fill this in at about $0.02 per new venue.
