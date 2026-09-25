@@ -32,6 +32,27 @@
    "name": "The NOLA Project food truck schedule",
    "url": "https://www.nolaproject.com/foodtrucks",
    "parser": "llm"
+  },
+  {
+   "kind": "brewery_calendar",
+   "name": "Parleaux Beer Lab events (Mato)",
+   "url": "https://ma.to/venue/parleauxbeerlab",
+   "parser": "llm",
+   "host": "parleaux-beer-lab"
+  },
+  {
+   "kind": "brewery_calendar",
+   "name": "Miel Brewery events (Mato)",
+   "url": "https://ma.to/venue/mielbrewery",
+   "parser": "llm",
+   "host": "miel-brewery"
+  },
+  {
+   "kind": "brewery_calendar",
+   "name": "Bayou Beer Garden events (Mato)",
+   "url": "https://ma.to/venue/bayoubeergarden",
+   "parser": "llm",
+   "host": "bayou-beer-garden"
   }
  ],
  "hosts": [
@@ -1317,6 +1338,23 @@
    ],
    "verified_by": [
     "https://nola.today/food"
+   ]
+  },
+  {
+   "slug": "paella-nola",
+   "name": "Paella NOLA",
+   "category": "popup",
+   "cuisine": "Spanish paella & tapas",
+   "website": "https://www.paellanola.com/",
+   "schedule_urls": [],
+   "instagram": null,
+   "home_base": null,
+   "rotates_at": [
+    "miel-brewery"
+   ],
+   "verified_by": [
+    "https://www.paellanola.com/",
+    "https://ma.to/venue/mielbrewery"
    ]
   }
  ]

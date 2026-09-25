@@ -241,6 +241,7 @@ export default function TapMapApp() {
         onSelect={select}
         onView={onView}
         onReady={(api) => (mapApi.current = api)}
+        onError={(msg) => console.warn("[map]", msg)}
       />
 
       <div className="tm-top">

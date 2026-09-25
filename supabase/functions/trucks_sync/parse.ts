@@ -153,3 +153,46 @@ Rules:
 - kind "popup" for pop-up kitchens/dinners at bars, breweries, markets; "truck_stop" for food trucks/trailers.
 - location_name = venue/place name (e.g. "Miel Brewery"); address if given. Ignore catering/private events, "book the truck", menus, and restaurant opening hours.
 - Do not invent anything. If nothing qualifies return {"stops":[]}.`;
+
+/** schema.org Event/FoodEvent objects embedded as JSON-LD -> stops (deterministic, no LLM). */
+export function parseJsonLdEvents(html: string, fallbackTruck: string | null): RawStop[] {
+  const out: RawStop[] = [];
+  const blocks = [...html.matchAll(/<script[^>]*type=["']application\/ld\+json["'][^>]*>([\s\S]*?)<\/script>/gi)];
+  const visit = (n: unknown) => {
+    if (!n || typeof n !== "object") return;
+    if (Array.isArray(n)) { n.forEach(visit); return; }
+    const o = n as Record<string, unknown>;
+    if (o["@graph"]) visit(o["@graph"]);
+    const t = ([] as unknown[]).concat(o["@type"] ?? []).map(String);
+    if (!t.some((x) => /Event$/.test(x)) || typeof o.startDate !== "string") return;
+    if (typeof o.eventStatus === "string" && /Cancelled|Postponed/i.test(o.eventStatus)) return;
+    if (!/T\d{2}:\d{2}/.test(o.startDate)) return; // need a start time
+    const s = new Date(o.startDate), e = typeof o.endDate === "string" ? new Date(o.endDate) : null;
+    if (isNaN(+s)) return;
+    const loc = (Array.isArray(o.location) ? o.location[0] : o.location) as Record<string, unknown> | undefined;
+    const addr = loc?.address as Record<string, unknown> | string | undefined;
+    const street = typeof addr === "string" ? addr
+      : addr ? [addr.streetAddress, addr.addressLocality, addr.addressRegion].filter(Boolean).join(", ") : "";
+    const geo = loc?.geo as Record<string, unknown> | undefined;
+    const org = (Array.isArray(o.organizer) ? o.organizer[0] : o.organizer) as Record<string, unknown> | undefined;
+    const p = chicagoNow(s), pe = e && !isNaN(+e) ? chicagoNow(e) : null;
+    const name = String(o.name ?? "");
+    out.push({
+      truck: fallbackTruck ?? String(org?.name ?? name),
+      kind: /pop.?up/i.test(name + " " + String(o.description ?? "")) ? "popup" : null,
+      date: `${p.year}-${p.month}-${p.day}`,
+      start: hhmm((+p.hour % 24) * 60 + +p.minute),
+      end: pe ? (pe.day !== p.day ? "24:00" : hhmm((+pe.hour % 24) * 60 + +pe.minute)) : null,
+      location_name: loc?.name ? String(loc.name) : null,
+      address: street || null,
+      lat: geo?.latitude != null ? +geo.latitude : null,
+      lng: geo?.longitude != null ? +geo.longitude : null,
+      description: [name, typeof o.description === "string" ? o.description.slice(0, 200) : ""].filter(Boolean).join(" — ") || null,
+      confidence: 0.85,
+    });
+  };
+  for (const b of blocks) {
+    try { visit(JSON.parse(b[1].trim())); } catch { /* ignore malformed JSON-LD */ }
+  }
+  return out;
+}

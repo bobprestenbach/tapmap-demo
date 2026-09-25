@@ -14,7 +14,7 @@ import { htmlToText, politeFetch, sha256, USER_AGENT } from "../_shared/http.ts"
 import { extractJson } from "../_shared/llm.ts";
 import { chicagoNow, chicagoToUtc, haversineM, NOLA_CENTER, nameSimilarity, normName, point } from "../_shared/geo.ts";
 import {
-  clampWindow, EXTRACT_SYSTEM, hhmm, looksLikeSchedule, parseNolaToday, parseSff, type RawStop, slugify, toMinutes,
+  clampWindow, EXTRACT_SYSTEM, hhmm, looksLikeSchedule, parseJsonLdEvents, parseNolaToday, parseSff, type RawStop, slugify, toMinutes,
 } from "./parse.ts";
 import { igRecentPosts, instagramEnabled, postsToText } from "./instagram.ts";
 import data from "../../../data/trucks/trucks.json" with { type: "json" };
@@ -315,7 +315,23 @@ async function processSource(
       try { stops = parseNolaToday(JSON.parse(body)); } catch { stops = []; }
       text = JSON.stringify(stops);
     } else {
-      text = htmlToText(body);
+      // Structured schema.org events beat LLM extraction: use them when present.
+      // On a truck's own site every event is that truck's stop; on calendar pages (breweries, event
+      // aggregators) events are mixed (trivia, watch parties...), so they go to the LLM as text.
+      const truck = src.meta.truck ? TRUCKS.find((t) => t.slug === src.meta.truck) : null;
+      const ld = parseJsonLdEvents(body, truck?.name ?? null);
+      if (ld.length && truck) {
+        stops = ld;
+        text = JSON.stringify(ld);
+        inc(ctx, "jsonld_events", ld.length);
+      } else {
+        text = htmlToText(body);
+        if (ld.length) {
+          text += "\n\nSTRUCTURED EVENTS (schema.org, times America/Chicago):\n" + ld.map((e) =>
+            `- ${e.date} ${e.start}${e.end ? "-" + e.end : ""} | ${e.description ?? ""} | at ${e.location_name ?? "?"}${e.address ? " (" + e.address + ")" : ""}`
+          ).join("\n");
+        }
+      }
     }
   }
 

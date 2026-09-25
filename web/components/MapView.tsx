@@ -33,6 +33,11 @@ interface Props {
 }
 
 const SOURCE = "tm-points";
+
+// See scripts/copy-maplibre-worker.mjs — the worker is served from /public/maplibre.
+if (typeof window !== "undefined") {
+  maplibregl.setWorkerUrl(new URL("/maplibre/maplibre-gl-worker.mjs", window.location.origin).href);
+}
 const CAT_KEYS: Category[] = ["restaurant", "bar", "food_truck", "music_venue", "popup"];
 const SOON_MS = 2 * 3600_000;
 
@@ -130,6 +135,7 @@ export default function MapView(props: Props) {
     });
     map.touchZoomRotate.disableRotation();
     mapRef.current = map;
+    if (window.location.search.includes("debug=1")) (window as unknown as { __tmMap: unknown }).__tmMap = map;
 
     const emitView = () => {
       const b = map.getBounds();

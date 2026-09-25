@@ -70,7 +70,7 @@ self.addEventListener("fetch", (event) => {
   }
 
   // Hashed Next.js assets and fonts are immutable: cache-first.
-  if (url.origin === self.location.origin && (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/icons/"))) {
+  if (url.origin === self.location.origin && (url.pathname.startsWith("/_next/static/") || url.pathname.startsWith("/icons/") || url.pathname.startsWith("/maplibre/"))) {
     event.respondWith(cacheFirst(req, SHELL));
     return;
   }

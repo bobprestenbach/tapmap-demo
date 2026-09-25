@@ -18,11 +18,16 @@ function findChromium() {
   throw new Error("Chromium not found");
 }
 
+// In sandboxed CI the outbound proxy comes from HTTPS_PROXY; localhost bypasses it.
+const proxyUrl = process.env.HTTPS_PROXY || process.env.https_proxy;
 const browser = await chromium.launch({
   executablePath: findChromium(),
+  ...(proxyUrl ? { proxy: { server: proxyUrl, bypass: "localhost,127.0.0.1" } } : {}),
   args: ["--use-gl=angle", "--use-angle=swiftshader", "--enable-unsafe-swiftshader", "--ignore-gpu-blocklist"],
 });
 const ctx = await browser.newContext({
+  serviceWorkers: process.env.SW === "1" ? "allow" : "block",
+  ignoreHTTPSErrors: Boolean(proxyUrl), // proxy re-signs TLS with its own CA (screenshots only)
   viewport: { width: 390, height: 844 },
   deviceScaleFactor: 2,
   isMobile: true,
@@ -34,6 +39,7 @@ const ctx = await browser.newContext({
 });
 const page = await ctx.newPage();
 page.on("console", (m) => m.type() === "error" && console.log("[console]", m.text()));
+page.on("requestfailed", (r) => console.log("[failed]", r.url().replace(/key=[^&]+/, "key=***").slice(0, 120), r.failure()?.errorText));
 page.on("pageerror", (e) => console.log("[pageerror]", e.message));
 const target = flags.has("--mock") ? `${url}${url.includes("?") ? "&" : "?"}mock=1` : url;
 await page.goto(target, { waitUntil: "networkidle", timeout: 60000 }).catch((e) => console.log("goto:", e.message));
